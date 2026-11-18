@@ -1,0 +1,29 @@
+name: council-check
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Checker tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Ledger integrity
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$HEAD_REF" ] && [[ "$HEAD_REF" == council/*/* ]]; then
+            python3 scripts/council_check.py --branch "$HEAD_REF" --base "origin/$BASE_REF"
+          else
+            python3 scripts/council_check.py
+          fi

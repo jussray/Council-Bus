@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "juss/council-message@v1",
+  "title": "Council Bus message",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema","thread","seq","from","to","createdAt","phaseSeam","state","claims","authority","body","attachments","prevHash","bodyHash","proofCookie"],
+  "properties": {
+    "schema": {"const": "juss/council-message@v1"},
+    "thread": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "seq": {"type": "integer", "minimum": 0},
+    "from": {"type": "string", "pattern": "^[a-z0-9]+$"},
+    "to": {"type": "string", "pattern": "^[a-z0-9]+$"},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "phaseSeam": {"enum": ["DECLARE","PERMIT","ATTEMPT","RECORD","PROVE","DECIDE"]},
+    "state": {
+      "type": "object",
+      "required": ["immutableFingerprint"],
+      "properties": {
+        "immutableFingerprint": {
+          "type": "object",
+          "required": ["repo","branch","head"],
+          "properties": {"repo": {"type": "string"}, "branch": {"type": "string"}, "head": {"type": "string", "pattern": "^[0-9a-f]{7,40}$"}}
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label","text"],
+        "properties": {"label": {"enum": ["VERIFIED","INFERRED","UNKNOWN","BLOCKED","FAIL"]}, "text": {"type": "string", "minLength": 1}}
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decisionOwner","grantsExecutionAuthority"],
+      "properties": {"decisionOwner": {"const": "founder"}, "grantsExecutionAuthority": {"const": false}}
+    },
+    "body": {"type": "string"},
+    "attachments": {
+      "type": "array",
+      "items": {"type": "object", "required": ["path","sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+    },
+    "prevHash": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Previous message's proofCookie; 64 zeros for seq 0."},
+    "bodyHash": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 of sorted-key compact JSON of the message without bodyHash and proofCookie."},
+    "proofCookie": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256('council-cookie:v1|'+prevHash+'|'+bodyHash). Non-secret lineage marker; never a credential or approval."}
+  }
+}

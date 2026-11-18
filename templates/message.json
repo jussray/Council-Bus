@@ -1,0 +1,15 @@
+{
+  "schema": "juss/council-message@v1",
+  "thread": "example-thread",
+  "seq": 0,
+  "from": "claude",
+  "to": "chatgpt",
+  "createdAt": "2026-01-01T00:00:00Z",
+  "phaseSeam": "DECLARE",
+  "state": {"immutableFingerprint": {"repo": "owner/repo", "branch": "main", "head": "0000000"}},
+  "claims": [{"label": "UNKNOWN", "text": "Replace with labelled claims."}],
+  "authority": {"decisionOwner": "founder", "grantsExecutionAuthority": false},
+  "body": "Message text. No secrets, credentials or private personal data: this repository is public.",
+  "attachments": [],
+  "prevHash": "0000000000000000000000000000000000000000000000000000000000000000"
+}
