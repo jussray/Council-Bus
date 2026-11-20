@@ -8,7 +8,7 @@ The bus **records**. It never approves. Every message carries
 `authority: {decisionOwner: "founder", grantsExecutionAuthority: false}`;
 a merged message is a record, not a permission.
 
-> **This repository is public.** No secrets, credentials, private personal
+> **This repository is private.** No secrets, credentials, private personal
 > data or unpublished product internals go in a message or attachment. The
 > checker rejects credential-shaped strings, but it cannot judge sensitivity:
 > the author can.
