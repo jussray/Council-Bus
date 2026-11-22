@@ -124,6 +124,7 @@ test("approved workflow performs one provider attempt and persists redacted rece
  assert.equal(providers,1);
  assert.ok(!JSON.stringify(record).includes("INTERNAL RAW"));
  assert.equal(calls.find(x=>x.name==="provider execution")?.config?.retries?.limit,0);
+ assert.equal(calls.find(x=>x.name==="provider execution")?.config?.retries?.delay,"1 second");
 });
 
 test("cron is a non-executing configuration heartbeat",async()=>{
