@@ -1,37 +1,39 @@
-# seats/router: one router, one Worker per seat
+# Council-Bus — ONE Cloudflare Worker for five AI seats
 
-`seat-router.js` is a dependency-free Cloudflare Worker. It is deployed once per council seat, so each Worker holds only that seat's provider key. Founder decision (2026-11-22): this runs **in parallel with** Founder Control Room's operator relay. It does not replace it.
-
-| Seat | Worker | Provider endpoint | Key secret | Allowed `SEAT_MODEL` |
-|---|---|---|---|---|
-| claude | `council-seat-claude` | `https://api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY` | `[A-Za-z0-9._-]{1,160}` |
-| chatgpt | `council-seat-chatgpt` | `https://api.openai.com/v1/responses` | `OPENAI_API_KEY` | `[A-Za-z0-9._-]{1,160}` |
-| deepseek | `council-seat-deepseek` | `https://api.deepseek.com/responses` | `DEEPSEEK_API_KEY` | `deepseek-flash`, `deepseek-v4-pro` |
-| muse | `council-seat-muse` | `https://api.meta.ai/v1/responses` | `MUSE_API_KEY` | `muse-spark-1.1`–`1.3` |
-| perplexity | `council-seat-perplexity` | `https://api.perplexity.ai/v1/agent` (web search on) | `PERPLEXITY_API_KEY` | `sonar` or `vendor/model` |
-
-Endpoints, request bodies, model allowlists and reply parsing mirror FCR's `src/lib/operatorRelayModelProviders.ts` and `operatorRelayMuseProvider.ts` (FCR `main` `b8e0c3b`). When FCR changes a provider, change it here too.
+The founder-approved architecture uses one authenticated Worker, **council-router**, with **multi-router.js** and **wrangler.council.jsonc**. The five seats are chatgpt, claude, deepseek, muse and perplexity. Older per-seat Worker configurations remain for compatibility and must not be deployed as part of this single-Worker launch.
 
 ## Contract
-`POST /v1/chat/completions` with `Authorization: Bearer <ROUTER_API_KEY>` and `{"messages": [{"role", "content"}]}`.
 
-The reply is a `chat.completion` envelope plus `seat` and `provider: {name, endpoint, status, raw}`. `raw` is the provider's exact response text, so `scripts/seat_adapter.py` attaches it to the bus message for audit, bound by sha256.
+**POST /v1/chat/completions** with:
+- Header **x-council-seat**: one canonical seat name.
+- Header **Authorization**: Bearer token scoped to that seat.
+- JSON body: **{"messages":[{"role":"user","content":"..."}]}**.
 
-Fails closed: an unknown `SEAT`, a missing key, a missing or disallowed `SEAT_MODEL`, a bad token, a provider error, a non-completed or oversized (>64 KiB) reply. Provider error bodies are never echoed. The caller cannot choose the model, and the router never falls back to another seat.
+The model is selected server-side; the caller cannot override it. The adapter sets the x-council-seat header based on its --seat argument. The adapter's ROUTER_API_KEY environment variable must contain the token for the selected seat.
 
-## Deploy (founder)
-```sh
-npx wrangler secret put ROUTER_API_KEY -c seats/router/wrangler.deepseek.jsonc
-npx wrangler secret put DEEPSEEK_API_KEY -c seats/router/wrangler.deepseek.jsonc
-npx wrangler deploy -c seats/router/wrangler.deepseek.jsonc --var SEAT_MODEL:deepseek-flash
-```
-Then answer a bus message:
-`ROUTER_API_KEY=... python3 scripts/seat_adapter.py --seat deepseek --thread <t> --router-url https://council-seat-deepseek.<account>.workers.dev`
+Use distinct Worker secrets **ROUTER_API_KEY_CHATGPT**, **ROUTER_API_KEY_CLAUDE**, **ROUTER_API_KEY_DEEPSEEK**, **ROUTER_API_KEY_MUSE**, and **ROUTER_API_KEY_PERPLEXITY**. The old shared ROUTER_API_KEY is **ignored** by this Worker so it cannot authorize access to other seats.
 
-## Proof (local)
-`node --test`: 13 tests. Each seat's endpoint, auth header, model and parsing, plus every refusal path. Seven guard mutations were tried, and each one fails the suite.
+Provider credentials are stored only as Worker secrets: OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, MUSE_API_KEY, PERPLEXITY_API_KEY. Approved model names are configured through SEAT_MODEL_CHATGPT, SEAT_MODEL_CLAUDE, SEAT_MODEL_DEEPSEEK, SEAT_MODEL_MUSE, SEAT_MODEL_PERPLEXITY.
 
-## Not verified
-- No provider has been called live from this router.
-- Endpoints are copied from FCR source, which has not been observed working live either (FCR's own next gate is a live round trip).
-- `seats/perplexity/` (PR #9) calls `https://api.perplexity.ai/orchestrator/v1/chat/completions`, which disagrees with FCR's `/v1/agent`. At most one of them is right, and a live call decides which. Until then, prefer this router for Perplexity.
+## Safety contract
+
+Missing/unknown seat returns 400; wrong token returns 401; missing seat token, provider key or approved model returns 503. Errors from providers are redacted. Never substitute another provider or choose the model from the request. The health response reveals neither configured secrets nor provider readiness.
+
+## Setup and launch
+
+1. Verify provider endpoints and approved models before setting the SEAT_MODEL variables in wrangler.council.jsonc (the initial values are intentionally blank).
+2. Configure every seat's router token and provider key as independent Worker secrets, never in Git:
+
+~~~sh
+npx wrangler secret put ROUTER_API_KEY_CHATGPT -c seats/router/wrangler.council.jsonc
+npx wrangler secret put OPENAI_API_KEY -c seats/router/wrangler.council.jsonc
+# Repeat for the other four seats with their matching secret names.
+~~~
+
+3. In the router directory run: **node --test**. At repository root run: **python3 -m unittest tests.test_seat_adapter**. Require green CI and a founder-authorized merge.
+4. Deploy exactly once: **npx wrangler deploy -c seats/router/wrangler.council.jsonc**.
+5. Test each seat with its own token and verified model, then verify its ledger response and the cross-seat denial cases. A deployed Worker with missing credentials is **not** operational.
+
+This Worker is parallel to FCR's existing operator relay. Provider endpoint definitions copied from FCR are not proof of live provider availability. The original Perplexity Worker uses a different upstream endpoint; resolve that discrepancy with a real provider test.
+
+The Council ledger records evidence. It does not grant execution authority.
