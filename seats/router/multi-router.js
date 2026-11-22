@@ -17,7 +17,22 @@ function json(body, status, extraHeaders = {}) {
 
 /** @param {{fetchImpl?: typeof fetch}} [options] */
 export function createCouncilRouter(options = {}) {
-  const perSeatRouter = createSeatRouter(options);
+  const perSeatRouter = createSeatRouter({
+    ...options,
+    // Cloudflare rate limiting is approximate and scoped by seat. Reject
+    // missing or broken bindings instead of making unmetered provider calls.
+    beforeProvider: async ({ env, seat }) => {
+      const limiter = env.COUNCIL_RATE_LIMITER;
+      if (!limiter || typeof limiter.limit !== "function") {
+        throw new Error("rate limiter binding unavailable");
+      }
+      const result = await limiter.limit({ key: seat });
+      if (typeof result?.success !== "boolean") {
+        throw new Error("invalid rate limiter result");
+      }
+      return result.success;
+    },
+  });
   return {
     /** @param {Request} request @param {Record<string, string | undefined>} env */
     async fetch(request, env = {}) {
