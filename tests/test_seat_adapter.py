@@ -141,6 +141,34 @@ class Adapter(unittest.TestCase):
         with self.assertRaises(sa.Refused):
             self.answer(Transport())
 
+    def seat_router_envelope(self, seat, content, raw_provider):
+        # Same shape seats/router/seat-router.js returns for every seat.
+        return json.dumps({
+            "id": "resp_1", "object": "chat.completion", "model": "m", "seat": seat,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
+            "provider": {"name": "p", "endpoint": "https://api.example/v1", "status": 200, "raw": raw_provider},
+        }).encode()
+
+    def test_every_seat_router_envelope_is_recorded(self):
+        for seat in ("claude", "chatgpt", "deepseek", "muse", "perplexity"):
+            with self.subTest(seat=seat):
+                for p in sorted(self.t.rglob("*"), reverse=True):
+                    p.unlink() if p.is_file() else p.rmdir()
+                self.t.mkdir(parents=True, exist_ok=True)
+                m0 = make(0, "founder", seat, cc.GENESIS)
+                self.put(m0)
+                raw = self.seat_router_envelope(seat, f"{seat} reply", '{"id":"resp_1","status":"completed"}')
+                out = sa.answer(self.root, "t1", seat, URL, "k", transport=Transport(raw=raw), now=NOW)
+                self.assertEqual(out.name, f"0001-{seat}-founder.json")
+                msg = json.loads(out.read_text())
+                self.assertEqual(msg["body"], f"{seat} reply")
+                self.assertEqual((self.t / "attachments" / msg["attachments"][0]["path"]).read_bytes(), raw)
+                self.assertEqual(cc.run(self.root).code, cc.OK)
+
+    def test_secret_inside_provider_raw_is_refused(self):
+        raw = self.seat_router_envelope("perplexity", "clean reply", '{"leak":"sk-' + "a" * 30 + '"}')
+        self.assertRefusedClean(Transport(raw=raw))
+
     def test_cli_exit_codes(self):
         self.assertEqual(sa.main(["--root", str(self.root), "--thread", "t1",
                                   "--router-url", "http://router.example"]), 2)
