@@ -200,3 +200,25 @@ test("approved Workflow uses step timeout, not request-scoped AbortSignal timeou
    globalThis.fetch=originalFetch;
  }
 });
+
+
+test("durable Workflow receipts persist only allowlisted fetch diagnostics",async()=>{
+ const envMock=env();
+ const step={
+  do:async(name,options,fn)=>typeof options==="function"?options():fn(),
+  waitForEvent:async()=>({payload:{decision:"approve",seat:"chatgpt",instanceId:"sanitize-network"}}),
+ };
+ for(const [diagnostic,want] of [["request_context","request_context"],["type_error","type_error"],["tls","tls"],["SECRET_PRIVATE","unclassified"],[42,"unclassified"]]){
+  const router={fetch:async()=>Response.json({error:{
+    message:"openai request failed",
+    diagnostic,
+    cause:"Bearer SECRET_PRIVATE SHOULD NOT BE PERSISTED",
+  }},{status:502})};
+  const actual=await runCouncilWorkflow({instanceId:"sanitize-network",payload:{seat:"chatgpt",messages:[{role:"user",content:"test"}]}},step,envMock,{router});
+  assert.equal(actual.state,"blocked");
+  assert.equal(actual.reason,"transport_failure");
+  assert.equal(actual.detail,want);
+  assert.ok(!JSON.stringify(actual).includes("SECRET_PRIVATE"));
+  assert.ok(!JSON.stringify(actual).includes("Bearer"));
+ }
+});

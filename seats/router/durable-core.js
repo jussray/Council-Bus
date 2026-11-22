@@ -7,6 +7,7 @@ const MAX_INPUT_CHARS = 48_000;
 const MAX_BODY_CHARS = 64_000;
 const INSTANCE_RE = /^council-(chatgpt|claude|deepseek|muse|perplexity)-[a-f0-9]{32}$/;
 const IDEMPOTENCY_RE = /^[A-Za-z0-9:_-]{8,80}$/;
+const SAFE_FETCH_DIAGNOSTICS = new Set(["request_context", "type_error", "aborted", "timeout", "dns", "tls", "connection_refused", "unclassified"]);
 
 function reply(body,status=200) {
   return new Response(JSON.stringify(body), {
@@ -171,17 +172,22 @@ export async function runCouncilWorkflow(event,step,env={}, {router=createCounci
       // Preserve only an allowlisted diagnostic category. Never persist
       // upstream response bodies, API credentials, or router error details.
       let reason="unclassified";
+      let detail;
       try {
         const error=await res.json();
         const message=error?.error?.message;
         if(typeof message==="string"){
           const http=/^(?:openai|anthropic|deepseek|meta|perplexity) returned HTTP ([1-5]\d{2})$/.exec(message);
           if(http) reason="upstream_http_"+http[1];
-          else if(/^(?:openai|anthropic|deepseek|meta|perplexity) request failed$/.test(message)) reason="transport_failure";
+          else if(/^(?:openai|anthropic|deepseek|meta|perplexity) request failed$/.test(message)) {
+            reason="transport_failure";
+            const category=error?.error?.diagnostic;
+            detail=SAFE_FETCH_DIAGNOSTICS.has(category) ? category : "unclassified";
+          }
           else if(/^(?:openai|anthropic|deepseek|meta|perplexity) returned an invalid response$/.test(message)) reason="invalid_response";
         }
       } catch { /* Malformed errors must not prevent a safe receipt. */ }
-      return {state:"blocked",seat,status:res.status,reason};
+      return {state:"blocked",seat,status:res.status,reason,...(detail?{detail}:{})};
     }
     const result=await res.json();
     const content=result?.choices?.[0]?.message?.content;

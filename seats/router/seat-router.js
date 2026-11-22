@@ -157,6 +157,26 @@ function json(body, status = 200, headers = {}) {
 }
 
 const fail = (message, status, headers) => json({ error: { message } }, status, headers);
+// Whitelist only structural exception categories; never echo exception.message,
+// cause, stack, request URL, provider response, or token to a client or Workflow.
+function fetchFailureCategory(value) {
+  if (!value || typeof value !== "object") return "unclassified";
+  const cause = value.cause && typeof value.cause === "object" ? value.cause : null;
+  const code = typeof cause?.code === "string" ? cause.code : value.code;
+  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return "dns";
+  if (code === "CERT_HAS_EXPIRED" || code === "ERR_TLS_CERT_ALTNAME_INVALID" || code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE") return "tls";
+  if (code === "ECONNREFUSED") return "connection_refused";
+  if (code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT") return "timeout";
+  // Inspect the native exception message for a known runtime condition, but
+  // never copy any text from that message to an error response.
+  const message = typeof value.message === "string" ? value.message : "";
+  if (/different request context|outside (?:of )?a request context|no active request context/i.test(message)) return "request_context";
+  if (value.name === "AbortError") return "aborted";
+  if (value.name === "TimeoutError") return "timeout";
+  if (value.name === "TypeError") return "type_error";
+  return "unclassified";
+}
+
 
 function validMessages(body) {
   const b = record(body);
@@ -251,8 +271,8 @@ export function createSeatRouter({ fetchImpl = globalThis.fetch, beforeProvider 
       let response;
       try {
         response = await fetchImpl(url, { method: "POST", redirect: "error", ...(useRequestTimeout ? { signal: AbortSignal.timeout(TIMEOUT_MS) } : {}), ...init });
-      } catch {
-        return fail(`${seat.provider} request failed`, 502);
+      } catch (error) {
+        return json({ error: { message: `${seat.provider} request failed`, diagnostic: fetchFailureCategory(error) } }, 502);
       }
       if (!response.ok) {
         try { await response.body?.cancel(); } catch { /* provider error bodies are never echoed */ }
