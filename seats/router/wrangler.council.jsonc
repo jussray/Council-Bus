@@ -1,19 +1,47 @@
 {
-  // Single Council-Bus Worker. The router fails closed until per-seat
-  // router tokens, provider keys and approved models are configured.
+  // ONE Cloudflare Worker for all Council seats, durable steps and protected intake.
   "name": "council-router",
-  "main": "multi-router.js",
+  "main": "workflow-entry.js",
   "compatibility_date": "2026-11-18",
   "workers_dev": true,
-  // Cloudflare's per-location limiter; each authenticated seat gets its own key.
-  // 20 provider calls / minute per seat (approximate; not a worldwide hard cap).
-  "ratelimits": [
-    { "name": "COUNCIL_RATE_LIMITER", "namespace_id": "71302401",
-      "simple": { "limit": 20, "period": 60 } }
-  ],
+  // Enable eligible Workers Trace Events for the account Logpush dataset.
+  // Data export still requires a separate verified destination + Logpush job.
+  "logpush": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": {"enabled": true, "invocation_logs": true, "persist": true, "head_sampling_rate": 1},
+    "traces": {"enabled": true, "persist": true, "head_sampling_rate": 1},
+    "issues": {"enabled": true}
+  },
+  "ratelimits": [{
+    "name": "COUNCIL_RATE_LIMITER",
+    "namespace_id": "71302401",
+    "simple": {"limit": 20, "period": 60}
+  }],
+  "workflows": [{
+    "name": "council-approval-flow",
+    "binding": "COUNCIL_DURABLE",
+    "class_name": "CouncilApprovalWorkflow"
+  }],
+  "queues": {
+    "producers": [{"queue": "council-intake", "binding": "COUNCIL_INTAKE"}],
+    "consumers": [{
+      "queue": "council-intake",
+      "max_batch_size": 1,
+      "max_batch_timeout": 5,
+      "max_retries": 3,
+      "dead_letter_queue": "council-intake-dlq"
+    }]
+  },
+  // Cloudflare Cron is UTC; metadata heartbeat only; never starts AI execution.
+  "triggers": {"crons": ["0 12 * * *"]},
+  // Mirrors the current deployed model; the other seats still fail closed.
+  // Store provider secrets only as Cloudflare Worker secrets.
   "vars": {
+    "SEAT_MODEL_CHATGPT": "gpt-6.2-sol",
     "SEAT_MODEL_CLAUDE": "",
-    "SEAT_MODEL_CHATGPT": "",
     "SEAT_MODEL_DEEPSEEK": "",
     "SEAT_MODEL_MUSE": "",
     "SEAT_MODEL_PERPLEXITY": ""
