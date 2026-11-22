@@ -11,7 +11,7 @@ const SEATS = {
 };
 
 function environment() {
-  const env = { ROUTER_API_KEY: "not-a-global-bypass", SEAT: "claude", SEAT_MODEL: "wrong-global" };
+  const env = { ROUTER_API_KEY: "not-a-global-bypass", SEAT: "claude", SEAT_MODEL: "wrong-global", COUNCIL_RATE_LIMITER: {limit: async () => ({success:true})} };
   const name = { chatgpt: "OPENAI", claude: "ANTHROPIC", deepseek: "DEEPSEEK", muse: "MUSE", perplexity: "PERPLEXITY" };
   for (const [seat, config] of Object.entries(SEATS)) {
     const suffix = seat.toUpperCase();
@@ -89,4 +89,56 @@ test("health exposes no keys or provider readiness and other paths are rejected"
   assert.ok(!text.includes("token-"));
   assert.ok(!text.includes("anthropic-key"));
   assert.equal((await worker.fetch(request("chatgpt", "token-chatgpt", {}, "/other"), env)).status, 404);
+});
+
+
+test("shared Worker applies Cloudflare rate limits to authenticated seats, separately", async () => {
+  const rateKeys = [];
+  const providerCalls = [];
+  const env = environment();
+  env.COUNCIL_RATE_LIMITER = {
+    limit: async ({key}) => {
+      rateKeys.push(key);
+      return {success: key === "chatgpt"};
+    }
+  };
+  const worker = createCouncilRouter({fetchImpl: async (url) => {
+    providerCalls.push(url);
+    return new Response(JSON.stringify(reply("chatgpt")), {status: 200});
+  }});
+  const chatgpt = await worker.fetch(request("chatgpt", "token-chatgpt"), env);
+  const claude = await worker.fetch(request("claude", "token-claude"), env);
+  assert.equal(chatgpt.status, 200);
+  assert.equal(claude.status, 429);
+  assert.deepEqual(rateKeys, ["chatgpt", "claude"]);
+  assert.deepEqual(providerCalls, [SEATS.chatgpt.endpoint]);
+});
+
+test("rate limiter absent, broken or malformed fails closed without provider calls", async () => {
+  const providerCalls = [];
+  const worker = createCouncilRouter({fetchImpl: async (...args) => {
+    providerCalls.push(args);
+    throw new Error("must not call upstream");
+  }});
+  const env = environment();
+  delete env.COUNCIL_RATE_LIMITER;
+  assert.equal((await worker.fetch(request("chatgpt", "token-chatgpt"), env)).status, 503);
+  env.COUNCIL_RATE_LIMITER = {limit: async () => {throw new Error("internal secret")}};
+  const broken = await worker.fetch(request("chatgpt", "token-chatgpt"), env);
+  assert.equal(broken.status, 503);
+  assert.ok(!(await broken.text()).includes("internal secret"));
+  env.COUNCIL_RATE_LIMITER = {limit: async () => ({success: "yes"})};
+  assert.equal((await worker.fetch(request("chatgpt", "token-chatgpt"), env)).status, 503);
+  assert.equal(providerCalls.length, 0);
+});
+
+test("unauthorized and invalid requests do not consume seat quota", async () => {
+  const rateKeys = [];
+  const env = environment();
+  env.COUNCIL_RATE_LIMITER = {limit: async ({key}) => {rateKeys.push(key); return {success:true};}};
+  const worker = createCouncilRouter({fetchImpl: async () => {throw new Error("must not call upstream")}});
+  assert.equal((await worker.fetch(request("claude", "token-chatgpt"), env)).status, 401);
+  assert.equal((await worker.fetch(request("claude", "token-claude", {messages:[]}), env)).status, 400);
+  assert.equal((await worker.fetch(request("unknown", "token-claude"), env)).status, 400);
+  assert.deepEqual(rateKeys, []);
 });

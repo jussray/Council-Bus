@@ -199,7 +199,7 @@ async function boundedText(response) {
 /**
  * @param {{fetchImpl?: typeof fetch}} [options]
  */
-export function createSeatRouter({ fetchImpl = globalThis.fetch } = {}) {
+export function createSeatRouter({ fetchImpl = globalThis.fetch, beforeProvider = null } = {}) {
   return {
     /** @param {Request} request @param {Record<string, string | undefined>} env */
     async fetch(request, env = {}) {
@@ -232,6 +232,19 @@ export function createSeatRouter({ fetchImpl = globalThis.fetch } = {}) {
       const messages = validMessages(body);
       if (!messages) {
         return fail(`Expected nonempty messages (system/user/assistant, string content, at most ${MAX_INPUT_CHARS} characters)`, 400);
+      }
+
+      // Optional gate for the consolidated Worker. Run only AFTER authentication
+      // and request validation; legacy per-seat Workers remain unchanged.
+      if (beforeProvider) {
+        let permitted;
+        try {
+          permitted = await beforeProvider({ request, env, seat: seatName });
+        } catch {
+          return fail("Rate limiting unavailable", 503);
+        }
+        if (permitted === false) return fail("Rate limit exceeded", 429);
+        if (permitted !== true) return fail("Rate limiting unavailable", 503);
       }
 
       const { url, init } = seat.request(key, model, messages);

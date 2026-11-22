@@ -5,6 +5,12 @@
   "main": "multi-router.js",
   "compatibility_date": "2026-11-18",
   "workers_dev": true,
+  // Cloudflare's per-location limiter; each authenticated seat gets its own key.
+  // 20 provider calls / minute per seat (approximate; not a worldwide hard cap).
+  "ratelimits": [
+    { "name": "COUNCIL_RATE_LIMITER", "namespace_id": "71302401",
+      "simple": { "limit": 20, "period": 60 } }
+  ],
   "vars": {
     "SEAT_MODEL_CLAUDE": "",
     "SEAT_MODEL_CHATGPT": "",
