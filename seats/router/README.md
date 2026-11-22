@@ -43,3 +43,27 @@ npx wrangler secret put OPENAI_API_KEY -c seats/router/wrangler.council.jsonc
 This Worker is parallel to FCR's existing operator relay. Provider endpoint definitions copied from FCR are not proof of live provider availability. The original Perplexity Worker uses a different upstream endpoint; resolve that discrepancy with a real provider test.
 
 The Council ledger records evidence. It does not grant execution authority.
+
+
+## Durable production flow (one Worker)
+
+The production main module is **workflow-entry.js**. It exports **CouncilApprovalWorkflow**, plus one Worker with HTTP, Queue, and Cron handlers. The original multi-router.js is an internal helper. The production entrypoint rejects legacy synchronous POST /v1/chat/completions (HTTP 409); clients must migrate to the reviewed durable intake.
+
+1. **Submit** POST /v1/council/workflows using x-council-seat, the seat-scoped bearer token, an idempotency-key (8–80 URL-safe characters) and JSON messages. HTTP 202 returns a deterministic Workflow ID. Authentication, request validation, and intake rate limiting must pass before enqueuing.
+2. **Queue** council-intake delivers the job to the same Worker, which starts council-approval-flow with the immutable instance ID. Duplicate deliveries are acknowledged only on a confirmed existing ID; other failures retry into council-intake-dlq.
+3. **Approve** from a founder-authenticated Cloudflare Access session using the seat token: POST /v1/council/workflows/{id}/approve with JSON {"decision":"approve"}. The Workflow otherwise waits up to 24 hours before expiring. The approval endpoint must remain founder-only.
+4. **Execute** only after the approval event. The Workflow uses the rate-limited provider router with zero automatic provider retries to avoid duplicate spending; persisted output omits raw provider response data and credentials.
+5. **Inspect** GET /v1/council/workflows/{id} with matching seat and token for status.
+6. **Cron** runs 0 12 * * * daily at 12:00 UTC and logs configuration health only. It never triggers AI calls or sends prompts.
+
+The same council-router Worker serves all Council seats; it binds one council-approval-flow Workflow, one council-intake Queue and one council-intake-dlq dead-letter Queue. Queue messages contain private prompts and must have tightly scoped permissions and bounded retention.
+
+### Logpush
+
+The logpush flag in wrangler.council.jsonc enables eligible Worker trace-event delivery, but it does NOT create a Logpush job or export data by itself. Configure a dedicated, approved destination with verified ownership and the required Logpush entitlement before enabling an export job. Do not export all account Workers' logs without a filter scoped to council-router. Never log bearer tokens, prompts or provider raw responses.
+
+### Release and migration gates
+
+Run node --test in seats/router and python3 -m unittest tests.test_seat_adapter from repository root. Require exact-head CI and green checks on main prior to deployment. Preserve existing OPENAI_API_KEY, ROUTER_API_KEY_CHATGPT, SEAT_MODEL_CHATGPT, COUNCIL_RATE_LIMITER and observability bindings; an incomplete Cloudflare bindings upload can remove secrets. Independently verify production Queue, Workflow, Cron, Access and authenticated provider execution before declaring operational status.
+
+The existing scripts/seat_adapter.py client is synchronous and is not yet a Workflow status-polling client. Migrate and test it before claiming end-to-end compatibility.
