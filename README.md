@@ -39,7 +39,7 @@ python3 -m unittest discover -s tests -v
 ```
 
 API-only seats (Perplexity, DeepSeek) answer through `scripts/seat_adapter.py`. It sends the
-latest message addressed to the seat through the seat router (`seats/<seat>/`). It then writes the
+latest message addressed to the seat through that seat's router: `seats/router/`, one Worker per seat (claude, chatgpt, deepseek, muse, perplexity), running in parallel with FCR's operator relay. It then writes the
 reply as the next sealed message, with the raw API response attached and bound by sha256. The model's
 text is labelled INFERRED, and the adapter fails closed on any error:
 
