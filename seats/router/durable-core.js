@@ -140,7 +140,7 @@ export function createCouncilApplication({router=createCouncilRouter()}={}) {
   };
 }
 
-export async function runCouncilWorkflow(event,step,env={}, {router=createCouncilRouter()}={}) {
+export async function runCouncilWorkflow(event,step,env={}, {router=createCouncilRouter({useRequestTimeout:false})}={}) {
   const approvedJob=await step.do("validate",async()=>{
     const payload=event.payload;
     if(!knownSeat(payload?.seat)||!validMessages(payload?.messages))return null;
@@ -157,7 +157,7 @@ export async function runCouncilWorkflow(event,step,env={}, {router=createCounci
      decision.payload.seat!==approvedJob.seat||
      decision.payload.instanceId!==event.instanceId)return {state:"rejected",seat:approvedJob.seat};
 
-  return step.do("provider execution",{retries:{limit:0,delay:"1 second"}},async()=>{
+  return step.do("provider execution",{retries:{limit:0,delay:"1 second"},timeout:"75 seconds"},async()=>{
     const seat=approvedJob.seat;
     const key=env["ROUTER_API_KEY_"+seat.toUpperCase()];
     if(typeof key!=="string"||!key)return {state:"blocked",seat,status:503};

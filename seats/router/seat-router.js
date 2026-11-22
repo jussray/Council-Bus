@@ -199,7 +199,7 @@ async function boundedText(response) {
 /**
  * @param {{fetchImpl?: typeof fetch}} [options]
  */
-export function createSeatRouter({ fetchImpl = globalThis.fetch, beforeProvider = null } = {}) {
+export function createSeatRouter({ fetchImpl = globalThis.fetch, beforeProvider = null, useRequestTimeout = true } = {}) {
   return {
     /** @param {Request} request @param {Record<string, string | undefined>} env */
     async fetch(request, env = {}) {
@@ -250,7 +250,7 @@ export function createSeatRouter({ fetchImpl = globalThis.fetch, beforeProvider 
       const { url, init } = seat.request(key, model, messages);
       let response;
       try {
-        response = await fetchImpl(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS), ...init });
+        response = await fetchImpl(url, { method: "POST", redirect: "error", ...(useRequestTimeout ? { signal: AbortSignal.timeout(TIMEOUT_MS) } : {}), ...init });
       } catch {
         return fail(`${seat.provider} request failed`, 502);
       }
