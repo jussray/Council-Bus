@@ -80,6 +80,7 @@ class Adapter(unittest.TestCase):
         url, headers, body = tr.calls[0]
         self.assertEqual(url, URL + "/v1/chat/completions")
         self.assertEqual(headers["authorization"], "Bearer k")
+        self.assertEqual(headers["x-council-seat"], "perplexity")
         self.assertEqual(body["model"], "sonar")
         self.assertIn("Perplexity: is X true?", body["messages"][1]["content"])
 
