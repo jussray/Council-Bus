@@ -19,6 +19,12 @@ Provider credentials are stored only as Worker secrets: OPENAI_API_KEY, ANTHROPI
 
 Missing/unknown seat returns 400; wrong token returns 401; missing seat token, provider key or approved model returns 503. Errors from providers are redacted. Never substitute another provider or choose the model from the request. The health response reveals neither configured secrets nor provider readiness.
 
+## Provider spending and rate limit gate
+
+The consolidated Worker requires Cloudflare's bound **COUNCIL_RATE_LIMITER** for every authenticated provider request. Missing, failing or malformed limiter decisions return 503; over-limit requests return 429. Invalid/unauthenticated requests do not consume the provider allowance. The Wrangler binding uses namespace 71302401 and an **approximate 20 requests per 60 seconds per seat per Cloudflare location**. This is a safety throttle, **not a globally strict billing cap**; Cloudflare notes counters are eventually consistent. For strict account-wide cost control, use provider spending limits or Durable Objects.
+
+The limiter runs only after the router has authenticated the selected seat and validated request messages, and before any provider call. The five seats share one Worker and one binding but have separate per-seat counter keys. The old per-seat Workers remain unchanged.
+
 ## Setup and launch
 
 1. Verify provider endpoints and approved models before setting the SEAT_MODEL variables in wrangler.council.jsonc (the initial values are intentionally blank).
