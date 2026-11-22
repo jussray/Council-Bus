@@ -181,3 +181,31 @@ test("unsafe provider ids are not passed through", async () => {
   const res = await createSeatRouter({ fetchImpl: fakeFetch(200, responsesBody("ok", { id: "<script>" })) }).fetch(req(), env("muse"));
   assert.equal((await res.json()).id, "unidentified-response");
 });
+
+
+test("outbound fetch failures expose only safe exception categories, never raw details",async () => {
+  const cases=[
+    [{name:"TypeError",message:"fetch failed AUTH=Bearer very-private"}, "type_error"],
+    [{name:"TypeError",message:"Cannot perform I/O on behalf of a different request context; secret-private"}, "request_context"],
+    [{name:"AbortError",message:"private upstream details"}, "aborted"],
+    [{name:"TimeoutError",message:"private upstream details"}, "timeout"],
+    [{name:"Error",message:"getaddrinfo ENOTFOUND private.host",cause:{code:"ENOTFOUND"}}, "dns"],
+    [{name:"Error",message:"private tls detail",cause:{code:"CERT_HAS_EXPIRED"}}, "tls"],
+    [{name:"Error",message:"private connection details",cause:{code:"ECONNREFUSED"}}, "connection_refused"],
+    [{name:"Error",message:"private-only-misleading-text",cause:{code:"UNTRUSTED_UNK"}}, "unclassified"],
+  ];
+  for(const [details,expected] of cases){
+    const res=await createSeatRouter({
+      fetchImpl:async()=>{const err=new Error(details.message);err.name=details.name; if(details.cause)err.cause=details.cause; throw err;},
+      useRequestTimeout:false,
+    }).fetch(req(),env("chatgpt"));
+    assert.equal(res.status,502,expected);
+    const result=await res.json();
+    assert.equal(result.error.message,"openai request failed");
+    assert.equal(result.error.diagnostic,expected);
+    const response=JSON.stringify(result);
+    assert.ok(!response.includes("private"),expected);
+    assert.ok(!response.includes("Bearer"),expected);
+    assert.ok(!response.includes("UNTRUSTED"),expected);
+  }
+});
