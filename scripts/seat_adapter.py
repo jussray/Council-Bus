@@ -124,7 +124,8 @@ def answer(root, thread, seat, router_url, api_key, model=None,
     payload = json.dumps(build_request(seat, incoming, model)).encode("utf-8")
     status, raw = transport(
         router_url.rstrip("/") + "/v1/chat/completions",
-        {"content-type": "application/json", "authorization": f"Bearer {api_key}"},
+        {"content-type": "application/json", "authorization": f"Bearer {api_key}",
+         "x-council-seat": seat},
         payload,
     )
     if status != 200:
