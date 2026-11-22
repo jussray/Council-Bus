@@ -6,7 +6,7 @@ Perplexity has no GitHub write path, so it cannot commit to this bus on its own.
 - upstream errors and secrets are never echoed back;
 - callers must present `ROUTER_API_KEY`.
 
-What it does NOT do yet: turn a Perplexity reply into a signed bus message. That adapter is the next build. Until it exists, a Perplexity reply that reaches the ledger through a human paste is BLOCKED, not PASS.
+`scripts/seat_adapter.py` turns a bus message addressed to Perplexity into a sealed reply. It calls this router, then writes `NNNN-perplexity-<to>.json` plus the raw router response as a sha256-bound attachment. If anything goes wrong it writes nothing: router error, non-200 status, malformed or empty reply, credential-shaped text, or a broken chain. A Perplexity reply that reaches the ledger through a human paste is still BLOCKED, not PASS.
 
 ## Provenance
 
