@@ -170,3 +170,33 @@ test("invalid provider failure JSON never leaks raw body to Workflow result",asy
  const record=await runCouncilWorkflow({instanceId:"bad-error-test",payload:{seat:"chatgpt",messages:[{role:"user",content:"ping"}]}},step,e,{router});
  assert.deepEqual(record,{state:"blocked",seat:"chatgpt",status:502,reason:"unclassified"});
 });
+
+
+test("approved Workflow uses step timeout, not request-scoped AbortSignal timeout", async () => {
+ const originalFetch=globalThis.fetch;
+ const e=env();
+ const seen=[],calls=[];
+ globalThis.fetch=async (url,init)=>{
+   seen.push({url,hasSignal:Object.prototype.hasOwnProperty.call(init,"signal")});
+   return Response.json({id:"resp-ready",status:"completed",output:[{type:"message",content:[{type:"output_text",text:"READY"}]}]});
+ };
+ const step={
+   do:async(name,opts,fn)=>{
+     if(typeof opts==="function"){fn=opts;opts=null;}
+     calls.push({name,options:opts});
+     return fn();
+   },
+   waitForEvent:async()=>({payload:{decision:"approve",seat:"chatgpt",instanceId:"workflow-fetch-timeout-test"}})
+ };
+ try {
+   const result=await runCouncilWorkflow({instanceId:"workflow-fetch-timeout-test",payload:{seat:"chatgpt",messages:[{role:"user",content:"READY?"}]}},step,e);
+   assert.equal(result.state,"completed");
+   assert.equal(result.content,"READY");
+   assert.deepEqual(seen,[{url:"https://api.openai.com/v1/responses",hasSignal:false}]);
+   const execution=calls.find(x=>x.name==="provider execution");
+   assert.equal(execution?.options?.timeout,"75 seconds");
+   assert.equal(execution?.options?.retries?.limit,0);
+ }finally {
+   globalThis.fetch=originalFetch;
+ }
+});
