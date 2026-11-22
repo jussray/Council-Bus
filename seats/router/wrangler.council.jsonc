@@ -1,0 +1,15 @@
+{
+  // Single Council-Bus Worker. The router fails closed until per-seat
+  // router tokens, provider keys and approved models are configured.
+  "name": "council-router",
+  "main": "multi-router.js",
+  "compatibility_date": "2026-11-18",
+  "workers_dev": true,
+  "vars": {
+    "SEAT_MODEL_CLAUDE": "",
+    "SEAT_MODEL_CHATGPT": "",
+    "SEAT_MODEL_DEEPSEEK": "",
+    "SEAT_MODEL_MUSE": "",
+    "SEAT_MODEL_PERPLEXITY": ""
+  }
+}
