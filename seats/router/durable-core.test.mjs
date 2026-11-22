@@ -135,3 +135,38 @@ test("cron is a non-executing configuration heartbeat",async()=>{
  assert.ok(logs.length>=1);
  assert.ok(!JSON.stringify(logs).includes("provider-secret"));
 });
+
+
+test("provider HTTP rejection persists only a bounded upstream status category", async () => {
+ const e=env(),step={
+   do:async(name,opts,fn)=>typeof opts==="function"?opts():fn(),
+   waitForEvent:async()=>({payload:{decision:"approve",seat:"chatgpt",instanceId:"provider-failure-test"}}),
+ };
+ const testCases=[
+  [{error:{message:"openai returned HTTP 401",raw:"sk-example-NEVER-STORE"}}, "upstream_http_401"],
+  [{error:{message:"openai returned HTTP 429",provider_key:"sk-example-NEVER-STORE"}}, "upstream_http_429"],
+  [{error:{message:"openai request failed",details:"supersecret"}}, "transport_failure"],
+  [{error:{message:"openai returned an invalid response",body:"DO NOT STORE"}}, "invalid_response"],
+  [{error:{message:"unexpected: private stuff"}}, "unclassified"],
+ ];
+ for(const [payload,reason] of testCases){
+  const router={fetch:async()=>Response.json(payload,{status:502})};
+  const record=await runCouncilWorkflow({instanceId:"provider-failure-test",payload:{seat:"chatgpt",messages:[{role:"user",content:"ping"}]}},step,e,{router});
+  assert.equal(record.state,"blocked");
+  assert.equal(record.status,502);
+  assert.equal(record.reason,reason);
+  assert.ok(!JSON.stringify(record).includes("supersecret"));
+  assert.ok(!JSON.stringify(record).includes("private stuff"));
+  assert.ok(!JSON.stringify(record).includes("sk-example"));
+ }
+});
+
+test("invalid provider failure JSON never leaks raw body to Workflow result",async()=>{
+ const e=env(),step={
+   do:async(name,opts,fn)=>typeof opts==="function"?opts():fn(),
+   waitForEvent:async()=>({payload:{decision:"approve",seat:"chatgpt",instanceId:"bad-error-test"}}),
+ };
+ const router={fetch:async()=>new Response("provider may leak sk-example-NEVER-STORE",{status:502})};
+ const record=await runCouncilWorkflow({instanceId:"bad-error-test",payload:{seat:"chatgpt",messages:[{role:"user",content:"ping"}]}},step,e,{router});
+ assert.deepEqual(record,{state:"blocked",seat:"chatgpt",status:502,reason:"unclassified"});
+});

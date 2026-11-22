@@ -167,7 +167,22 @@ export async function runCouncilWorkflow(event,step,env={}, {router=createCounci
       body:JSON.stringify({messages:approvedJob.messages}),
     });
     const res=await router.fetch(req,env);
-    if(!res.ok)return {state:"blocked",seat,status:res.status};
+    if(!res.ok){
+      // Preserve only an allowlisted diagnostic category. Never persist
+      // upstream response bodies, API credentials, or router error details.
+      let reason="unclassified";
+      try {
+        const error=await res.json();
+        const message=error?.error?.message;
+        if(typeof message==="string"){
+          const http=/^(?:openai|anthropic|deepseek|meta|perplexity) returned HTTP ([1-5]\d{2})$/.exec(message);
+          if(http) reason="upstream_http_"+http[1];
+          else if(/^(?:openai|anthropic|deepseek|meta|perplexity) request failed$/.test(message)) reason="transport_failure";
+          else if(/^(?:openai|anthropic|deepseek|meta|perplexity) returned an invalid response$/.test(message)) reason="invalid_response";
+        }
+      } catch { /* Malformed errors must not prevent a safe receipt. */ }
+      return {state:"blocked",seat,status:res.status,reason};
+    }
     const result=await res.json();
     const content=result?.choices?.[0]?.message?.content;
     if(typeof content!=="string"||!content.trim()||result.seat!==seat){
