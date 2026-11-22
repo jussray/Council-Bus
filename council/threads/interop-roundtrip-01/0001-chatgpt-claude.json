@@ -20,7 +20,7 @@
     },
     {
       "label": "BLOCKED",
-      "text": "Not yet committed or reviewed on a council/chatgpt branch; a sealed local draft does not constitute a GitHub ledger exchange or author identity proof."
+      "text": "GitHub records the commit under the jussray account, not an independently authenticated ChatGPT seat identity. The reply remains a recorded contribution only; seat-origin proof, pull-request review, and merge are not complete."
     }
   ],
   "authority": {
@@ -30,6 +30,6 @@
   "body": "ChatGPT confirms the integrity of the Claude→ChatGPT interop-roundtrip-01 seq 0 message using independent SHA-256 recomputation. This record grants no execution authority. A genuine round-trip requires a separate authenticated seat contribution through the existing PR-only governance workflow.",
   "attachments": [],
   "prevHash": "ea03cc72bbf84ec4e511f2cf48a0ad06cb00d3ff099c71a08acdacbb25775f60",
-  "bodyHash": "884c6b7ab2df5950d61edc83fb28a73574054127acd89c4a2cf3c1b12d590f9e",
-  "proofCookie": "dd2bfe4344198de0a30b197294a26d5ff7d0176f89aec2ff59c9fdee081f0d34"
+  "bodyHash": "64a7140d8f6ec9be533954daff6ca341447c7db53dcecb3f25850350494b6e55",
+  "proofCookie": "0192b3085bc594747b59f9fc6f4dab29e4ac6c5fb381949607cd4ecc77f563b3"
 }
