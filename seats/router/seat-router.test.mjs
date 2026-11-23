@@ -86,7 +86,7 @@ for (const [seat, c] of Object.entries(CASES)) {
     const out = await res.json();
     const [call] = fetchImpl.calls;
     assert.equal(call.url, c.url);
-    assert.equal(call.init.redirect, "error");
+    assert.equal(call.init.redirect, "manual");
     c.auth(call.init.headers);
     assert.equal(call.body.model, c.model ?? c.env.SEAT_MODEL, "model comes from SEAT_MODEL, never the caller");
     assert.equal(out.seat, seat);
@@ -208,4 +208,40 @@ test("outbound fetch failures expose only safe exception categories, never raw d
     assert.ok(!response.includes("Bearer"),expected);
     assert.ok(!response.includes("UNTRUSTED"),expected);
   }
+});
+
+
+test("Workers-compatible fetch mode rejects redirects without forwarding provider credentials", async () => {
+  for (const seat of Object.keys(CASES)) {
+    let calls = 0;
+    const fetchImpl=async (url, init) => {
+      calls++;
+      // Workerd throws TypeError for redirect:"error" before any network I/O.
+      if (init.redirect !== "manual") throw new TypeError("Invalid redirect value");
+      assert.equal(url, CASES[seat].url);
+      return new Response(null,{status:302,headers:{location:"https://attacker.invalid/steal-token"}});
+    };
+    const res=await createSeatRouter({fetchImpl,useRequestTimeout:false}).fetch(req(),env(seat));
+    assert.equal(calls,1,seat);
+    assert.equal(res.status,502,seat);
+    const body=await res.text();
+    assert.ok(!body.includes("attacker.invalid"),seat);
+    assert.ok(!body.includes("ok-openai"),seat);
+    assert.ok(!body.includes("ok-anthropic"),seat);
+    assert.match(body,/redirect/i,seat);
+  }
+});
+
+test("Workers-compatible manual mode permits successful direct provider responses", async () => {
+  let networkCalls=0;
+  const fetchImpl=async (url,init)=>{
+    networkCalls++;
+    if(init.redirect!=="manual")throw new TypeError("Invalid redirect value");
+    assert.equal(url,CASES.chatgpt.url);
+    return Response.json(CASES.chatgpt.reply);
+  };
+  const res=await createSeatRouter({fetchImpl,useRequestTimeout:false}).fetch(req(),env("chatgpt"));
+  assert.equal(res.status,200);
+  assert.equal((await res.json()).choices[0].message.content,CASES.chatgpt.want);
+  assert.equal(networkCalls,1);
 });
