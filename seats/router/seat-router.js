@@ -270,9 +270,17 @@ export function createSeatRouter({ fetchImpl = globalThis.fetch, beforeProvider 
       const { url, init } = seat.request(key, model, messages);
       let response;
       try {
-        response = await fetchImpl(url, { method: "POST", redirect: "error", ...(useRequestTimeout ? { signal: AbortSignal.timeout(TIMEOUT_MS) } : {}), ...init });
+        response = await fetchImpl(url, { method: "POST", redirect: "manual", ...(useRequestTimeout ? { signal: AbortSignal.timeout(TIMEOUT_MS) } : {}), ...init });
       } catch (error) {
         return json({ error: { message: `${seat.provider} request failed`, diagnostic: fetchFailureCategory(error) } }, 502);
+      }
+      // Workerd does not implement redirect:"error". With manual redirects,
+      // refuse 3xx and opaque responses so provider credentials cannot be
+      // forwarded to another origin. Never echo Location or redirect bodies.
+      if (response.type === "opaqueredirect" || response.status === 0 ||
+          response.redirected || (response.status >= 300 && response.status < 400)) {
+        try { await response.body?.cancel(); } catch { /* ignore redirect body */ }
+        return fail(seat.provider + " redirect blocked", 502);
       }
       if (!response.ok) {
         try { await response.body?.cancel(); } catch { /* provider error bodies are never echoed */ }
