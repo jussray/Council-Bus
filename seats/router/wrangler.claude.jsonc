@@ -1,0 +1,10 @@
+{
+  // Council-Bus seat router for the claude seat. Deploy: npx wrangler deploy -c seats/router/wrangler.claude.jsonc
+  // Secrets (wrangler secret put ... -c this file): ROUTER_API_KEY and the seat's provider key.
+  // SEAT_MODEL is founder-chosen and must be set before use; the Worker fails closed without it.
+  "name": "council-seat-claude",
+  "main": "seat-router.js",
+  "compatibility_date": "2026-11-18",
+  "workers_dev": true,
+  "vars": { "SEAT": "claude" }
+}
