@@ -86,7 +86,7 @@ for (const [seat, c] of Object.entries(CASES)) {
     const out = await res.json();
     const [call] = fetchImpl.calls;
     assert.equal(call.url, c.url);
-    assert.equal(call.init.redirect, "error");
+    assert.equal(call.init.redirect, "manual");
     c.auth(call.init.headers);
     assert.equal(call.body.model, c.model ?? c.env.SEAT_MODEL, "model comes from SEAT_MODEL, never the caller");
     assert.equal(out.seat, seat);
