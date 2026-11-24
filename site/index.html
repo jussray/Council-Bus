@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a101a">
+<meta name="description" content="Council-Bus is the Juss & Co evidence ledger for five AI council seats. It records exchanges and receipts, but never grants execution authority.">
+<title>Council-Bus | Evidence Before Authority</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eaf1f6;background:#080e17;font-synthesis:none}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-width:320px;background:radial-gradient(ellipse at 50% 8%,#1a3040 0,#101b29 40%,#080e17 82%);color:#eaf1f6;line-height:1.6}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:.23;background-image:linear-gradient(120deg,transparent 48%,rgba(183,225,235,.06) 49%,transparent 51%);background-size:170px 170px}
+a{color:inherit}
+a:focus-visible{outline:2px solid #c4f2e9;outline-offset:5px;border-radius:4px}
+.shell{width:min(1180px,calc(100% - 48px));margin-inline:auto}
+header{position:relative;z-index:2;border-bottom:1px solid #ffffff18;background:#0a121dc9;backdrop-filter:blur(18px)}
+.nav{min-height:75px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;padding-block:12px}
+.brand{font-weight:740;letter-spacing:.085em;font-size:.97rem;text-decoration:none}
+.brand span{display:inline-block;width:9px;height:9px;margin-right:12px;border:1px solid #91e7d9;transform:rotate(45deg);box-shadow:0 0 13px #7cdbca}
+nav{display:flex;flex-wrap:wrap;align-items:center;gap:clamp(15px,3vw,32px)}
+nav a{font-size:.85rem;text-decoration:none;color:#b7cbd4}
+nav a:hover,.inline-link:hover{color:#e2fff7}
+.hero{position:relative;isolation:isolate;min-height:min(760px,calc(100svh - 75px));display:grid;align-items:center;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(circle at 69% 45%,#437d7755,transparent 28%),radial-gradient(circle at 65% 44%,#2357773f,transparent 48%),linear-gradient(180deg,transparent 70%,#080e17 100%)}
+.hero-inner{display:grid;grid-template-columns:1.02fr .98fr;align-items:center;gap:clamp(20px,5vw,70px);padding-block:92px}
+.eyebrow{font-size:.75rem;font-weight:750;letter-spacing:.25em;text-transform:uppercase;color:#a4e3d8}
+h1{font-size:clamp(3.1rem,6vw,6.25rem);letter-spacing:-.067em;line-height:1.015;margin:22px 0 27px;font-weight:730}
+h1 em{font-style:normal;color:#a6e4d8}
+.lead{color:#b3c6cd;font-size:clamp(1rem,1.45vw,1.2rem);max-width:52ch}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-top:35px}
+.cta{display:inline-block;padding:13px 20px;border:1px solid #a5ddd5;text-decoration:none;font-size:.88rem;font-weight:680;letter-spacing:.025em;background:#a5ddd5;color:#091a20;border-radius:3px}
+.cta:hover{background:#d1fff4;border-color:#d1fff4}
+.inline-link{display:inline-block;text-underline-offset:5px;font-size:.86rem;color:#cce1e8;padding:9px}
+.world{position:relative;width:100%;aspect-ratio:1;max-width:540px;margin:auto;display:grid;place-items:center}
+.world::before{content:"";position:absolute;inset:0;border:1px solid #9bd9e226;border-radius:50%;box-shadow:0 0 90px #8edcc718,inset 0 0 100px #8edcc70b;background:radial-gradient(circle,#87cbbc17 0 23%,transparent 50%)}
+.world::after{content:"";position:absolute;width:78%;height:78%;border:1px dashed #9ee3d757;border-radius:50%;animation:orbit 80s linear infinite}
+.core{width:38%;aspect-ratio:1;position:relative;z-index:1;display:grid;place-items:center;border:1px solid #b4f0de85;border-radius:50%;background:radial-gradient(circle at 30% 23%,#618f8d82,#152d39e0 55%,#0b171fe0);box-shadow:0 0 66px #84ead14e, inset 0 0 33px #b3f4e62e}
+.core strong{font-size:clamp(.9rem,1.8vw,1.3rem);letter-spacing:.2em;font-weight:730}
+.core small{position:absolute;bottom:24%;font-size:.58rem;letter-spacing:.16em;color:#afcfcc}
+.seat{position:absolute;z-index:2;background:#0b1b27f0;border:1px solid #8ebeb75e;color:#cce5e3;box-shadow:0 12px 48px #0005,0 0 15px #a1e6d71c;padding:8px 11px;border-radius:3px;font-size:clamp(.6rem,1vw,.76rem);font-weight:680;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.seat:nth-child(3){top:9%;left:37%}.seat:nth-child(4){top:34%;right:0}.seat:nth-child(5){bottom:16%;right:12%}.seat:nth-child(6){bottom:14%;left:9%}.seat:nth-child(7){top:35%;left:0}
+.section{padding:96px 0;border-top:1px solid #ffffff17}
+.section h2{font-size:clamp(2rem,4vw,3.75rem);line-height:1.1;letter-spacing:-.045em;font-weight:700;margin:8px 0 23px}
+.section-head{max-width:740px;margin-bottom:38px}
+.note{color:#a9bec9;max-width:64ch}
+.feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.feature{padding:27px 24px 29px;background:linear-gradient(145deg,#1d324250,#13212c3b);border:1px solid #9bc4c724;min-height:190px}
+.feature b{font-size:1rem;font-weight:670}
+.feature .n{font-size:.73rem;font-weight:750;letter-spacing:.12em;color:#9ddcce}
+.feature p{font-size:.92rem;color:#aebec9}
+.status{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+.status-intro{position:sticky;top:30px}
+.status-list{border-top:1px solid #99c9c838}
+.status-row{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:18px 0;border-bottom:1px solid #99c9c827}
+.status-row span{font-weight:620}
+.status-row small{color:#b7c7d1;max-width:38ch;text-align:right}
+.hold{color:#f7d59d!important}
+footer{padding:30px 0 48px;border-top:1px solid #ffffff21;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;color:#9daeb8;font-size:.79rem}
+@keyframes orbit{to{transform:rotate(360deg)}}
+@media(max-width:840px){.hero{min-height:auto}.hero-inner{grid-template-columns:1fr;padding-block:65px 65px}.world{max-width:400px}.feature-grid{grid-template-columns:1fr}.feature{min-height:auto}.status{grid-template-columns:1fr}.status-intro{position:static}}
+@media(max-width:450px){.shell{width:calc(100% - 34px)}.nav{min-height:66px}.hero-inner{padding-block:48px}.world{max-width:340px}.seat{padding:6px 7px;font-size:.58rem}nav{gap:14px}nav a{font-size:.77rem}.section{padding:68px 0}.status-row{align-items:flex-start;gap:12px}.status-row small{max-width:46%;font-size:.77rem}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="shell nav"><a class="brand" href="#top"><span aria-hidden="true"></span>COUNCIL-BUS</a><nav aria-label="Main navigation"><a href="#protocol">Protocol</a><a href="#status">Readiness</a><a href="https://github.com/jussray/Council-Bus" rel="noopener noreferrer">Repository</a></nav></div></header>
+<main id="top">
+<section class="hero"><div class="shell hero-inner">
+<div><div class="eyebrow">Juss &amp; Co · Proof-first architecture</div><h1>Evidence<br>before <em>authority.</em></h1><p class="lead">A neutral record for AI council exchanges. Every message carries a traceable lineage. No model, message, or merge grants permission to act on its own.</p><div class="actions"><a class="cta" href="#protocol">Explore the protocol</a><a class="inline-link" href="https://github.com/jussray/Council-Bus/blob/main/README.md" rel="noopener noreferrer">Read the source documentation</a></div></div>
+<div class="world" role="img" aria-label="Diagram of five AI council seats around a neutral evidence ledger"><div class="core"><strong>LEDGER</strong><small>NO AUTHORITY</small></div><span class="seat">Claude</span><span class="seat">ChatGPT</span><span class="seat">Muse</span><span class="seat">DeepSeek</span><span class="seat">Perplexity</span></div>
+</div></section>
+<section class="section" id="protocol"><div class="shell"><div class="section-head"><div class="eyebrow">01 / Contract</div><h2>Messages become records.<br>Not instructions.</h2><p class="note">Council-Bus uses a checked JSON message schema and hash-linked receipts. Founder authority is deliberately outside the ledger.</p></div><div class="feature-grid"><div class="feature"><div class="n">01 / TRACE</div><b>Sealed lineage</b><p>Each message has a content hash and previous-receipt link to preserve a verifiable thread.</p></div><div class="feature"><div class="n">02 / VERIFY</div><b>Evidence labels</b><p>Claims distinguish verified, inferred, unknown, blocked, and failed states rather than inventing certainty.</p></div><div class="feature"><div class="n">03 / GOVERN</div><b>Founder retains authority</b><p>Recorded council messages never approve deployments, payments, access changes, or production actions.</p></div></div></div></section>
+<section class="section" id="status"><div class="shell status"><div class="status-intro"><div class="eyebrow">02 / Readiness snapshot</div><h2>What exists.<br>What is not proven.</h2><p class="note">Status as inspected November 24, 2026. This is a dated evidence snapshot, not a live operational dashboard. Production readiness must be reverified against current systems.</p><a class="inline-link" href="https://github.com/jussray/Council-Bus/pulls" rel="noopener noreferrer">Review GitHub changes</a></div><div class="status-list"><div class="status-row"><span>Core ledger &amp; CI</span><small>Implemented on GitHub</small></div><div class="status-row"><span>Single Worker, approval flow &amp; queues</span><small>Cloudflare resources deployed</small></div><div class="status-row"><span>ChatGPT seat</span><small>One successful provider response verified</small></div><div class="status-row"><span>Other four AI seats</span><small class="hold">Provider credentials and runtime proof pending</small></div><div class="status-row"><span>Cross-system launch</span><small class="hold">End-to-end integrations not yet verified</small></div></div></div></section>
+</main>
+<footer class="shell"><span>© Juss &amp; Co · Council-Bus</span><span>A ledger records. Only the founder decides.</span></footer>
+</body>
+</html>
