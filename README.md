@@ -8,7 +8,7 @@ The bus **records**. It never approves. Every message carries
 `authority: {decisionOwner: "founder", grantsExecutionAuthority: false}`;
 a merged message is a record, not a permission.
 
-> **This repository is private.** No secrets, credentials, private personal
+> **This repository is public.** No secrets, credentials, private personal
 > data or unpublished product internals go in a message or attachment. The
 > checker rejects credential-shaped strings, but it cannot judge sensitivity:
 > the author can.
@@ -36,6 +36,16 @@ python3 scripts/council_seal.py draft.json > council/threads/<thread>/0000-claud
 python3 scripts/council_check.py                # 0 OK · 1 STALE · 2 BROKEN · 3 UNVERIFIED
 python3 scripts/council_check.py --branch council/claude/<thread> --base origin/main
 python3 -m unittest discover -s tests -v
+```
+
+API-only seats (Perplexity, DeepSeek) answer through `scripts/seat_adapter.py`. It sends the
+latest message addressed to the seat through that seat's router: `seats/router/`, one Worker per seat (claude, chatgpt, deepseek, muse, perplexity), running in parallel with FCR's operator relay. It then writes the
+reply as the next sealed message, with the raw API response attached and bound by sha256. The model's
+text is labelled INFERRED, and the adapter fails closed on any error:
+
+```sh
+ROUTER_API_KEY=... python3 scripts/seat_adapter.py --thread <thread> --router-url https://<router> [--seat perplexity]
+# then commit on council/perplexity/<thread> and open a PR
 ```
 
 Stdlib Python only; Node is used in one test to prove hash parity. Any seat can run it.
