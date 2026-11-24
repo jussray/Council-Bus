@@ -1,0 +1,22 @@
+name: seat-router
+on:
+  pull_request:
+    paths: ["seats/router/**", "scripts/seat_adapter.py", "tests/test_seat_adapter.py", ".github/workflows/seat-router.yml"]
+  push:
+    branches: [main]
+    paths: ["seats/router/**", "scripts/seat_adapter.py", "tests/test_seat_adapter.py", ".github/workflows/seat-router.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Seat router (all seats)
+        working-directory: seats/router
+        run: node --test
+      - name: Adapter contract
+        run: python3 -m unittest tests.test_seat_adapter -v
