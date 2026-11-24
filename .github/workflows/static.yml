@@ -1,6 +1,11 @@
 # Publish only an explicitly reviewed public site; Council ledger files must never be uploaded.
 name: Deploy public site to Pages
 on:
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'scripts/check_public_site.py'
+      - '.github/workflows/static.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -8,8 +13,17 @@ concurrency:
   group: council-public-pages
   cancel-in-progress: false
 jobs:
+  check-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate isolated public page and anchors
+        run: python3 scripts/check_public_site.py
   deploy:
-    if: github.ref == 'refs/heads/main'
+    needs: check-site
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
