@@ -45,5 +45,8 @@
     "SEAT_MODEL_DEEPSEEK": "",
     "SEAT_MODEL_MUSE": "",
     "SEAT_MODEL_PERPLEXITY": ""
-  }
+  },
+  // Isolated, fail-closed Preview Base. No production Queue, Workflow, or
+  // provider secrets are copied into Preview environments.
+  "previews": {}
 }
