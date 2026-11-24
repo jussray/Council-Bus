@@ -39,7 +39,7 @@ class PublicSiteChecker(HTMLParser):
             href = data.get("href") or ""
             if href.startswith("#"):
                 self.refs.add(href[1:])
-            elif not href.startswith(ALLOWED_EXTERNAL_PREFIX + ("/", "#")) and href != ALLOWED_EXTERNAL_PREFIX:
+            elif not href.startswith((ALLOWED_EXTERNAL_PREFIX + "/", ALLOWED_EXTERNAL_PREFIX + "#")) and href != ALLOWED_EXTERNAL_PREFIX:
                 self.errors.append("unapproved outbound link: " + href)
         if tag == "html" and data.get("lang") != "en":
             self.errors.append("html lang must be en")
