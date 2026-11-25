@@ -385,11 +385,28 @@ def main(argv=None):
     ap.add_argument("--thread", required=True)
     ap.add_argument("--seat", default="perplexity")
     ap.add_argument("--router-url", required=True)
-    ap.add_argument("--model")
+    ap.add_argument("--action", choices=("submit", "collect"), default="submit",
+                    help="queue for founder approval, or collect an already completed Workflow")
+    ap.add_argument("--workflow-id", help="required for --action collect")
+    ap.add_argument("--model", help="unsupported in durable mode; configured server-side")
     args = ap.parse_args(argv)
     try:
-        out = answer(args.root, args.thread, args.seat, args.router_url,
-                     os.environ.get("ROUTER_API_KEY", ""), args.model)
+        api_key = (os.environ.get("ROUTER_API_KEY_" + args.seat.upper())
+                   or os.environ.get("ROUTER_API_KEY", ""))
+        access_token = os.environ.get("CF_ACCESS_TOKEN") or None
+        if args.action == "submit":
+            instance = enqueue(args.root, args.thread, args.seat, args.router_url,
+                               api_key, access_token=access_token, model=args.model)
+            if instance is None:
+                print(f"NOTHING: latest message in {args.thread} is not addressed to {args.seat}")
+                return 0
+            print(f"QUEUED: {instance}")
+            print("NEXT: founder approves the Workflow; then use --action collect --workflow-id <id>")
+            return 0
+        if not args.workflow_id:
+            raise Refused("--workflow-id is required for --action collect")
+        out = collect(args.root, args.thread, args.seat, args.router_url, api_key,
+                      args.workflow_id, access_token=access_token)
     except Refused as exc:
         print(f"REFUSED: {exc}")
         return 2
@@ -397,7 +414,7 @@ def main(argv=None):
         print(f"NOTHING: latest message in {args.thread} is not addressed to {args.seat}")
         return 0
     print(f"WROTE: {out}")
-    print(f"NEXT: commit on council/{args.seat}/{args.thread} and open a PR to main")
+    print(f"NEXT: review content, commit on council/{args.seat}/{args.thread}, open a PR to main")
     return 0
 
 
