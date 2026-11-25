@@ -349,5 +349,35 @@ class Adapter(unittest.TestCase):
             runner.join(timeout=3)
 
 
+    def test_http_submit_never_reads_unbounded_success_body(self):
+        from unittest.mock import patch
+        class LargeReply:
+            status = 202
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def read(self, size=-1):
+                if size < 0:
+                    raise AssertionError("unbounded read of HTTP success body")
+                return b"x" * size
+        with patch.object(sa, "_credential_safe_open", return_value=LargeReply()):
+            with self.assertRaises(sa.Refused):
+                sa.http_transport(URL + "/v1/council/workflows",
+                                  {"authorization": "Bearer synthetic"}, b"{}")
+
+    def test_http_submit_never_reads_unbounded_error_body(self):
+        from unittest.mock import patch
+        import urllib.error
+        class LargeError(urllib.error.HTTPError):
+            def read(self, size=-1):
+                if size < 0:
+                    raise AssertionError("unbounded read of HTTP error body")
+                return b"x" * size
+        err = LargeError(URL, 503, "unavailable", {}, None)
+        with patch.object(sa, "_credential_safe_open", side_effect=err):
+            with self.assertRaises(sa.Refused):
+                sa.http_transport(URL + "/v1/council/workflows",
+                                  {"authorization": "Bearer synthetic"}, b"{}")
+
+
 if __name__ == "__main__":
     unittest.main()

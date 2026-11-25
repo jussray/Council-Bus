@@ -48,5 +48,22 @@
   },
   // Isolated, fail-closed Preview Base. No production Queue, Workflow, or
   // provider secrets are copied into Preview environments.
-  "previews": {}
+  "previews": {
+    "observability": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "issues": { "enabled": true },
+      "logs": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "invocation_logs": true,
+        "persist": true
+      },
+      "traces": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "persist": true
+      }
+    }
+  }
 }
