@@ -124,10 +124,9 @@ export const SEATS = Object.freeze({
   perplexity: {
     provider: "perplexity",
     keyEnv: "PERPLEXITY_API_KEY",
-    model: (v) => {
-      if (v === "sonar") return "perplexity/sonar";
-      return v.length <= 160 && /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(v) ? v : null;
-    },
+    // Agent API can route across providers. Council's Perplexity seat must
+    // never silently substitute another model, provider or billing lane.
+    model: (v) => (v === "sonar" || v === "perplexity/sonar") ? "perplexity/sonar" : null,
     request: responsesRequest("https://api.perplexity.ai/v1/agent", { tools: [{ type: "web_search" }], store: false }),
     text: (b) => responsesText(b, { outputText: false }),
   },

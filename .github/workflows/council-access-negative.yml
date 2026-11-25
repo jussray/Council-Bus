@@ -1,0 +1,84 @@
+name: Council anonymous Access boundary
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/seat_adapter.py"
+      - "tests/test_seat_adapter.py"
+      - "seats/router/**"
+      - ".github/workflows/council-access-negative.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/seat_adapter.py"
+      - "tests/test_seat_adapter.py"
+      - "seats/router/**"
+      - ".github/workflows/council-access-negative.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  anonymous-denial:
+    name: Anonymous Council routes must be blocked by Cloudflare Access
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Test every sensitive live route without authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://council-router.mcgill-raylene.workers.dev'
+          synthetic_id='council-chatgpt-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          headers="$(mktemp)"
+          body="$(mktemp)"
+          trap 'rm -f "$headers" "$body"' EXIT
+
+          probe() {
+            local label="$1" method="$2" path="$3" data="$4" status=""
+            : > "$headers"
+            : > "$body"
+            # No tokens, cookies, auth headers, valid messages or provider keys.
+            # For write-like routes '{}' cannot enqueue, approve or execute.
+            if [ "$method" = POST ]; then
+              if ! status="$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
+                  --max-redirs 0 --request POST --header 'content-type: application/json' \
+                  --data "$data" --output "$body" --dump-header "$headers" \
+                  --write-out '%{http_code}' "$base$path")"; then
+                echo "BLOCKED: $label was unreachable, not verified protected."
+                return 1
+              fi
+            else
+              if ! status="$(curl --silent --show-error --connect-timeout 10 --max-time 25 \
+                  --max-redirs 0 --output "$body" --dump-header "$headers" \
+                  --write-out '%{http_code}' "$base$path")"; then
+                echo "BLOCKED: $label was unreachable, not verified protected."
+                return 1
+              fi
+            fi
+            echo "$label: anonymous HTTP $status"
+            case "$status" in
+              301|302|303|307|308)
+                if grep -Eiq '^location:[[:space:]]*https://[^[:space:]]+\.cloudflareaccess\.com/' "$headers" ||
+                   grep -Eiq '^location:[[:space:]]*(https://[^[:space:]]+)?/cdn-cgi/access/' "$headers"; then
+                  echo "PASS: $label intercepted by Cloudflare Access."
+                  return 0
+                fi
+                ;;
+              401|403)
+                if grep -Eiq 'Cloudflare Access|Cloudflare Zero Trust' "$body"; then
+                  echo "PASS: $label denied by Cloudflare Access."
+                  return 0
+                fi
+                ;;
+            esac
+            echo "FAIL: $label did not show independently attributable Cloudflare Access enforcement."
+            return 1
+          }
+
+          probe health GET /health ''
+          probe intake POST /v1/council/workflows '{}'
+          probe status GET "/v1/council/workflows/$synthetic_id" ''
+          probe approval POST "/v1/council/workflows/$synthetic_id/approve" '{}'
+          probe legacy POST /v1/chat/completions '{}'
+          echo 'PASS: All five live Council routes reject anonymous access.'
