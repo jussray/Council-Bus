@@ -137,6 +137,33 @@ test("fails closed on unknown seat, missing key, disallowed model; never substit
   assert.equal(fetchImpl.calls.length, 0);
 });
 
+
+test("Perplexity seat rejects cross-provider and unreviewed Agent API models before outbound fetch", async () => {
+  const fetchImpl = fakeFetch(200, CASES.perplexity.reply);
+  const router = createSeatRouter({ fetchImpl });
+  const forbidden = [
+    "anthropic/claude-sonnet-4-6",
+    "openai/gpt-6",
+    "google/gemini-flash",
+    "perplexity/not-reviewed",
+    "perplexity/sonar-pro",
+    "sonar-pro",
+    "muse-spark-1.3",
+  ];
+  for (const model of forbidden) {
+    const response = await router.fetch(req(), env("perplexity", { SEAT_MODEL: model }));
+    assert.equal(response.status, 503, "unapproved Perplexity model " + model + " was accepted");
+    assert.equal(fetchImpl.calls.length, 0, "rejected config must not call upstream");
+  }
+  for (const allowed of ["sonar", "perplexity/sonar"]) {
+    const response = await router.fetch(req(), env("perplexity", { SEAT_MODEL: allowed }));
+    assert.equal(response.status, 200);
+    assert.equal(fetchImpl.calls.at(-1).body.model, "perplexity/sonar");
+  }
+  assert.equal(fetchImpl.calls.length, 2);
+});
+
+
 test("rejects bad request bodies", async () => {
   const r = createSeatRouter({ fetchImpl: fakeFetch(200, CASES.muse.reply) });
   for (const body of [{}, { messages: [] }, { messages: [{ role: "tool", content: "x" }] }, { messages: [{ role: "user", content: 1 }] },
