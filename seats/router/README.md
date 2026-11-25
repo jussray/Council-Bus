@@ -2,7 +2,10 @@
 
 The founder-approved architecture uses one authenticated Worker, **council-router**, with **multi-router.js** and **wrangler.council.jsonc**. The five seats are chatgpt, claude, deepseek, muse and perplexity. Older per-seat Worker configurations remain for compatibility and must not be deployed as part of this single-Worker launch.
 
-## Contract
+## Legacy per-seat contract (not production)
+
+The API below describes historical standalone seat Workers. The deployed `council-router` production entrypoint rejects synchronous `/v1/chat/completions` with HTTP 409; use the approval-gated Workflow contract in the section below.
+
 
 **POST /v1/chat/completions** with:
 - Header **x-council-seat**: one canonical seat name.
@@ -66,4 +69,6 @@ The logpush flag in wrangler.council.jsonc enables eligible Worker trace-event d
 
 Run node --test in seats/router and python3 -m unittest tests.test_seat_adapter from repository root. Require exact-head CI and green checks on main prior to deployment. Preserve existing OPENAI_API_KEY, ROUTER_API_KEY_CHATGPT, SEAT_MODEL_CHATGPT, COUNCIL_RATE_LIMITER and observability bindings; an incomplete Cloudflare bindings upload can remove secrets. Independently verify production Queue, Workflow, Cron, Access and authenticated provider execution before declaring operational status.
 
-The existing scripts/seat_adapter.py client is synchronous and is not yet a Workflow status-polling client. Migrate and test it before claiming end-to-end compatibility.
+The current `scripts/seat_adapter.py` CLI has two explicit, approval-preserving phases: `--action submit` queues an immutable message-bound job without approval or ledger write; `--action collect --workflow-id <id>` checks a matching completed Workflow and writes a sanitized, SHA-256-bound receipt. Collection does not send a founder approval. The transport rejects redirects and caps HTTP response bodies, including error bodies, at 128 KiB.
+
+`seats/router/adapter-contract.test.mjs` exercises the actual Python-to-JavaScript request and Workflow ID contract, then simulates founder approval and sanitized collection using **synthetic data and a fake provider**. It verifies software interoperability without calling an external AI provider or proving a newly executed live end-to-end request. The public ledger still requires human review before committing or merging any generated text.
