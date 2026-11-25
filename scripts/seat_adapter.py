@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from council_check import BROKEN, FILE_RE, SECRET_RES, run, seal  # noqa: E402
 
 MAX_REPLY_CHARS = 32_000
+MAX_HTTP_REPLY_BYTES = 128 * 1024
 SYSTEM_PROMPT = (
     "You are the {seat} seat on the Juss & Co AI council. You are answering one "
     "message on a public, append-only ledger. Reply in plain text. Label every "
@@ -61,14 +62,22 @@ def _credential_safe_open(req, timeout):
     return urllib.request.build_opener(_NoRedirect).open(req, timeout=timeout)
 
 
+def _read_bounded_http_body(response):
+    """Never buffer an unlimited remote success or error body in memory."""
+    body = response.read(MAX_HTTP_REPLY_BYTES + 1)
+    if len(body) > MAX_HTTP_REPLY_BYTES:
+        raise Refused("router response exceeds maximum allowed size")
+    return body
+
+
 def http_transport(url, headers, payload, timeout=60):
     """POST JSON; return (status, raw_bytes). Never raises on HTTP status."""
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
         with _credential_safe_open(req, timeout=timeout) as resp:
-            return resp.status, resp.read()
+            return resp.status, _read_bounded_http_body(resp)
     except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
+        return exc.code, _read_bounded_http_body(exc)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise Refused(f"router unreachable: {type(exc).__name__}") from None
 
