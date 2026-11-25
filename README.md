@@ -38,14 +38,33 @@ python3 scripts/council_check.py --branch council/claude/<thread> --base origin/
 python3 -m unittest discover -s tests -v
 ```
 
-API-only seats (Perplexity, DeepSeek) answer through `scripts/seat_adapter.py`. It sends the
-latest message addressed to the seat through that seat's router: `seats/router/`, one Worker per seat (claude, chatgpt, deepseek, muse, perplexity), running in parallel with FCR's operator relay. It then writes the
-reply as the next sealed message, with the raw API response attached and bound by sha256. The model's
-text is labelled INFERRED, and the adapter fails closed on any error:
+API-only seats answer through the **approval-gated Council Workflow** at
+`seats/router/` rather than the retired synchronous endpoint. The
+production Cloudflare Worker currently has a verified OpenAI-backed ChatGPT
+execution receipt; the other providers require their own authorized bindings
+and live verification.
+
+The stdlib adapter has two explicit phases. Submission creates a deterministic,
+sealed-message-bound Queue job, but **does not approve it or write a reply**.
+The founder approves through the existing authenticated Council Workflow
+endpoint. Only collection of a completed, matching Workflow writes a sealed
+ledger message and SHA-256-bound **sanitized** receipt. It never publishes the
+raw provider response or session credentials. Model output remains `INFERRED`
+and grants no operational authority.
 
 ```sh
-ROUTER_API_KEY=... python3 scripts/seat_adapter.py --thread <thread> --router-url https://<router> [--seat perplexity]
-# then commit on council/perplexity/<thread> and open a PR
+# Set ROUTER_API_KEY_PERPLEXITY to the authorized per-seat key in your shell.
+# For Cloudflare Access, use your own authorized CF_ACCESS_TOKEN environment value.
+python3 scripts/seat_adapter.py --thread <thread> --seat perplexity   --router-url https://council-router.mcgill-raylene.workers.dev --action submit
+# Founder performs a separate, explicitly authenticated approval in Council.
+python3 scripts/seat_adapter.py --thread <thread> --seat perplexity   --router-url https://council-router.mcgill-raylene.workers.dev   --action collect --workflow-id <id>
+# Inspect the resulting ledger entry and sanitized attachment before creating a PR.
 ```
 
-Stdlib Python only; Node is used in one test to prove hash parity. Any seat can run it.
+**No automatic approval.** Collection refuses pending, blocked, failed,
+cross-seat, unrelated, malformed or credential-shaped results and never
+overwrites a sealed message. The configured provider model is controlled by
+the Worker, not by the CLI. Cloudflare Access credentials remain private and
+are never stored in the public repository.
+
+Stdlib Python only; Node is used in one test to prove hash parity.
