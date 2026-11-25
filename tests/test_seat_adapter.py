@@ -175,5 +175,122 @@ class Adapter(unittest.TestCase):
                                   "--router-url", "http://router.example"]), 2)
 
 
+    def workflow_id(self, seat="perplexity"):
+        key = hashlib.sha256(f"t1:{seat}:{self.m0['proofCookie']}".encode()).hexdigest()
+        return f"council-{seat}-" + hashlib.sha256(f"{seat}:{key}".encode()).hexdigest()[:32]
+
+    def test_durable_enqueue_is_deterministic_and_does_not_write_or_approve(self):
+        workflow_id = self.workflow_id()
+        tr = Transport(status=202, raw=json.dumps({
+            "id": workflow_id, "state": "queued_for_approval", "approved": False,
+        }).encode())
+        before = self.files()
+        actual = sa.enqueue(self.root, "t1", "perplexity", URL, "k",
+                            transport=tr)
+        self.assertEqual(actual, workflow_id)
+        self.assertEqual(before, self.files())
+        self.assertEqual(len(tr.calls), 1)
+        url, headers, payload = tr.calls[0]
+        self.assertEqual(url, URL + "/v1/council/workflows")
+        self.assertEqual(headers["x-council-seat"], "perplexity")
+        self.assertEqual(headers["authorization"], "Bearer k")
+        self.assertEqual(len(headers["idempotency-key"]), 64)
+        self.assertNotIn("model", payload)
+        self.assertIn("Perplexity: is X true?", payload["messages"][1]["content"])
+        self.assertFalse(any("approve" in url for url, _, _ in tr.calls))
+
+    def test_durable_enqueue_fails_closed_on_wrong_id_and_status(self):
+        before = self.files()
+        for status, data in (
+            (409, {"error": {"message": "legacy endpoint"}}),
+            (202, {"id": "council-perplexity-" + "f" * 32, "state": "queued_for_approval", "approved": False}),
+            (202, {"id": self.workflow_id(), "state": "completed", "approved": True}),
+        ):
+            with self.subTest(status=status, data=data):
+                tr = Transport(status=status, raw=json.dumps(data).encode())
+                with self.assertRaises(sa.Refused):
+                    sa.enqueue(self.root, "t1", "perplexity", URL, "k", transport=tr)
+                self.assertEqual(self.files(), before)
+
+    def test_durable_collect_only_records_proven_completed_workflow(self):
+        workflow_id = self.workflow_id()
+        body = {
+            "id": workflow_id,
+            "status": "complete",
+            "output": {
+                "state": "completed", "seat": "perplexity",
+                "provider": "perplexity", "response_id": "resp_example_1",
+                "content": "[INFERRED] The claim remains unresolved.",
+                "provider_raw": "do-not-persist-private-provider-body",
+            },
+            "debug": "not-a-public-attachment",
+        }
+        calls = []
+        def getter(url, headers):
+            calls.append((url, dict(headers)))
+            return 200, json.dumps(body).encode()
+
+        out = sa.collect(self.root, "t1", "perplexity", URL, "k", workflow_id,
+                         transport=getter, now=NOW)
+        self.assertEqual(out.name, "0001-perplexity-claude.json")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], URL + "/v1/council/workflows/" + workflow_id)
+        self.assertEqual(calls[0][1]["x-council-seat"], "perplexity")
+        msg = json.loads(out.read_text())
+        self.assertEqual(msg["prevHash"], self.m0["proofCookie"])
+        self.assertEqual(msg["authority"], {"decisionOwner": "founder", "grantsExecutionAuthority": False})
+        self.assertEqual(msg["body"], "[INFERRED] The claim remains unresolved.")
+        self.assertEqual([c["label"] for c in msg["claims"]], ["VERIFIED", "INFERRED"])
+        attachment = (self.t / "attachments" / msg["attachments"][0]["path"]).read_bytes()
+        self.assertEqual(msg["attachments"][0]["sha256"], hashlib.sha256(attachment).hexdigest())
+        self.assertNotIn(b"provider_raw", attachment)
+        self.assertNotIn(b"debug", attachment)
+        self.assertIn(b"resp_example_1", attachment)
+        self.assertEqual(cc.run(self.root).code, cc.OK)
+
+    def test_durable_collect_refuses_unapproved_unrelated_failed_or_secret(self):
+        workflow_id = self.workflow_id()
+        prior = self.files()
+        invalid_cases = [
+            {"id": workflow_id, "status": "running", "output": None},
+            {"id": workflow_id, "status": "complete", "output": {"state": "blocked", "seat": "perplexity"}},
+            {"id": workflow_id, "status": "complete", "output": {
+                "state": "completed", "seat": "chatgpt", "provider": "openai",
+                "response_id": "resp_test", "content": "wrong seat",
+            }},
+            {"id": workflow_id, "status": "complete", "output": {
+                "state": "completed", "seat": "perplexity", "provider": "perplexity",
+                "response_id": "resp_test", "content": "sk-" + "a" * 40,
+            }},
+        ]
+        for value in invalid_cases:
+            with self.subTest(value=value):
+                with self.assertRaises(sa.Refused):
+                    sa.collect(self.root, "t1", "perplexity", URL, "k", workflow_id,
+                               transport=lambda url, headers: (200, json.dumps(value).encode()), now=NOW)
+                self.assertEqual(self.files(), prior)
+
+        wrong_id = "council-perplexity-" + "f" * 32
+        with self.assertRaises(sa.Refused):
+            sa.collect(self.root, "t1", "perplexity", URL, "k", wrong_id,
+                       transport=lambda url, headers: self.fail("should not make request"))
+        self.assertEqual(self.files(), prior)
+
+    def test_durable_collect_refuses_replay_after_message_written(self):
+        workflow_id = self.workflow_id()
+        value = {"id": workflow_id, "status": "complete", "output": {
+            "state": "completed", "seat": "perplexity", "provider": "perplexity",
+            "response_id": "resp_test", "content": "ready",
+        }}
+        get = lambda url, headers: (200, json.dumps(value).encode())
+        out = sa.collect(self.root, "t1", "perplexity", URL, "k", workflow_id,
+                         transport=get, now=NOW)
+        files = self.files()
+        self.assertTrue(out.is_file())
+        self.assertIsNone(sa.collect(self.root, "t1", "perplexity", URL, "k", workflow_id,
+                                     transport=lambda url, headers: self.fail("no second retrieval"), now=NOW))
+        self.assertEqual(self.files(), files)
+
+
 if __name__ == "__main__":
     unittest.main()
