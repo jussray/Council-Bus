@@ -292,5 +292,62 @@ class Adapter(unittest.TestCase):
         self.assertEqual(self.files(), files)
 
 
+    def test_both_workflow_transports_never_follow_redirects_with_credentials(self):
+        # Access may answer with a login redirect. urllib normally follows it
+        # and forwards the original Authorization header to the new URL.
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+
+        target_hits = []
+        class RedirectServer(BaseHTTPRequestHandler):
+            redirect_status = 302
+
+            def do_POST(self):
+                self.respond()
+
+            def do_GET(self):
+                self.respond()
+
+            def respond(self):
+                if self.path == "/target":
+                    target_hits.append({
+                        "method": self.command,
+                        "authorization": self.headers.get("Authorization"),
+                        "access": self.headers.get("Cf-Access-Token"),
+                    })
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"redirect followed")
+                    return
+                self.send_response(self.redirect_status)
+                self.send_header("Location", f"http://127.0.0.1:{self.server.server_port}/target")
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectServer)
+        runner = threading.Thread(target=server.serve_forever, daemon=True)
+        runner.start()
+        url = f"http://127.0.0.1:{server.server_port}/redirect"
+        headers = {
+            "authorization": "Bearer synthetic-test-token",
+            "Cf-Access-Token": "synthetic-access-cookie",
+        }
+        try:
+            for response_status in (302, 307):
+                with self.subTest(response_status=response_status):
+                    RedirectServer.redirect_status = response_status
+                    post_status, _ = sa.http_transport(url, headers, b"{}")
+                    get_status, _ = sa.get_transport(url, headers)
+                    self.assertEqual(post_status, response_status)
+                    self.assertEqual(get_status, response_status)
+                    self.assertEqual(target_hits, [], "a redirect forwarded sensitive headers")
+        finally:
+            server.shutdown()
+            server.server_close()
+            runner.join(timeout=3)
+
+
 if __name__ == "__main__":
     unittest.main()
