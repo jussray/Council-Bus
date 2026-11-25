@@ -49,11 +49,23 @@ class Refused(Exception):
     """Adapter refused to write. The message is safe to show (no secrets)."""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward Council router or Access credentials to a Location URL."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _credential_safe_open(req, timeout):
+    """Per-call opener with normal transport handling but no HTTP redirects."""
+    return urllib.request.build_opener(_NoRedirect).open(req, timeout=timeout)
+
+
 def http_transport(url, headers, payload, timeout=60):
     """POST JSON; return (status, raw_bytes). Never raises on HTTP status."""
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _credential_safe_open(req, timeout=timeout) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()
@@ -200,7 +212,7 @@ def get_transport(url, headers, timeout=60):
     """GET JSON from a Workflow status endpoint without exposing error bodies."""
     req = urllib.request.Request(url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _credential_safe_open(req, timeout=timeout) as resp:
             raw = resp.read(MAX_WORKFLOW_REPLY_BYTES + 1)
             if len(raw) > MAX_WORKFLOW_REPLY_BYTES:
                 raise Refused("workflow status response too large")
