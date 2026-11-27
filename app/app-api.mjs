@@ -93,9 +93,18 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
    if(typeof claim!=='string'||claim.trim().length<5||claim.length>8000||evidence===null)return fail(400,'invalid_record');
    const id=crypto.randomUUID(),created=new Date().toISOString();
    const sha=await digest(JSON.stringify({claim:claim.trim(),evidence}));
-   try {await env.COUNCIL_DB.prepare('INSERT INTO council_records (id, owner_email, claim, evidence_json, claim_sha256, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(id,owner,claim.trim(),JSON.stringify(evidence),sha,created).run();}
-   catch{return fail(503,'ledger_unavailable')}
+   // D1 batch executes as a single transaction: no draft without its audit receipt.
+   if(typeof env.COUNCIL_DB.batch!=='function')return fail(503,'ledger_unavailable');
+   try {
+    const statements=[
+     env.COUNCIL_DB.prepare('INSERT INTO council_records (id, owner_email, claim, evidence_json, claim_sha256, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(id,owner,claim.trim(),JSON.stringify(evidence),sha,created),
+     env.COUNCIL_DB.prepare('INSERT INTO council_events (id, owner_email, action, subject_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(),owner,'draft_recorded',id,JSON.stringify({claimHash:sha,evidenceCount:evidence.length}),created)
+    ];
+    const results=await env.COUNCIL_DB.batch(statements);
+    if(!Array.isArray(results)||results.length!==2||results.some(value=>value?.success!==true))return fail(503,'ledger_unavailable');
+   }catch{return fail(503,'ledger_unavailable')}
    return reply({id,claim:claim.trim(),evidence,claimHash:sha,createdAt:created,label:'UNKNOWN',sealed:false,source:'durable_draft_not_git_ledger',authority:OWNER},201);
   }
   if(path==='/api/workflows'&&request.method==='GET'){
