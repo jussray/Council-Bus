@@ -121,15 +121,27 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
    try {const previous=await env.COUNCIL_DB.prepare('SELECT id, owner_email, record_id, seat, created_at FROM council_workflow_links WHERE record_id = ? AND seat = ? AND owner_email = ?').bind(recordId,seat,owner).first();
     if(previous)return reply({id:previous.id,recordId,seat,state:'queued_for_approval',approved:false,authority:OWNER},200);
    }catch{return fail(503,'ledger_unavailable')}
+   // Durable intent-before-effect: a missing audit must never dispatch a Queue request.
+   // After a 202 acknowledgement the link + its receipt commit atomically in D1.
+   if(typeof env.COUNCIL_DB.batch!=='function')return fail(503,'workflow_receipt_unavailable');
+   if(!await audit(env,owner,'workflow_submission_intent',recordId,{seat,claimHash:record.claim_sha256}))
+    return fail(503,'audit_unavailable');
    const idempotency=recordId+':'+seat;
    const response=await sendToRouter(env,request,seat,'https://council.internal/v1/council/workflows',{messages:[{role:'user',content:record.claim}]},{'idempotency-key':idempotency});
    if(!response)return fail(503,'router_unavailable');
    let result;try{result=await response.json()}catch{return fail(502,'router_error')}
    if(response.status!==202||!WORKFLOW.test(result?.id||'')||!result.id.startsWith('council-'+seat+'-')||result?.approved!==false)return fail(502,'router_error');
-   try{await env.COUNCIL_DB.prepare('INSERT INTO council_workflow_links (id, owner_email, record_id, seat, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(result.id,owner,recordId,seat,new Date().toISOString()).run();}
-   catch{return fail(503,'workflow_receipt_unavailable')}
-   if(!await audit(env,owner,'workflow_submitted',result.id,{recordId,seat}))return fail(503,'audit_unavailable');
+   const created=new Date().toISOString();
+   try {
+    const results=await env.COUNCIL_DB.batch([
+     env.COUNCIL_DB.prepare('INSERT INTO council_workflow_links (id, owner_email, record_id, seat, created_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(result.id,owner,recordId,seat,created),
+     env.COUNCIL_DB.prepare('INSERT INTO council_events (id, owner_email, action, subject_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(),owner,'workflow_submitted',result.id,JSON.stringify({recordId,seat}),created)
+    ]);
+    if(!Array.isArray(results)||results.length!==2||results.some(x=>x?.success!==true))
+     return fail(503,'workflow_receipt_unavailable');
+   }catch{return fail(503,'workflow_receipt_unavailable')}
    return reply({id:result.id,recordId,seat,state:'queued_for_approval',approved:false,authority:OWNER},202);
   }
   const found=path.match(/^\/api\/workflows\/(council-(?:chatgpt|claude|deepseek|muse|perplexity)-[0-9a-f]{32})(\/approve)?$/);
