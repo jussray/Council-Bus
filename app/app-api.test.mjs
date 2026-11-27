@@ -33,7 +33,7 @@ function db(){
 }
 const env=()=>({COUNCIL_DB:db(),COUNCIL_RATE_LIMITER:{limit:async()=>({success:true})},SEAT_MODEL_CHATGPT:'configured-model',ROUTER_API_KEY_CHATGPT:'server-only-token',COUNCIL_ROUTER:{fetch:async req=>{
  const path=new URL(req.url).pathname;
- if(path==='/v1/council/readiness')return Response.json({seats:[{id:'chatgpt',configured:true,runtimeVerified:false}]});
+ if(path==='/v1/council/readiness')return Response.json({seats:[{id:'chatgpt',configured:true},{id:'claude',configured:false},{id:'deepseek',configured:false},{id:'muse',configured:false},{id:'perplexity',configured:false}]});
  if(path==='/v1/council/workflows')return Response.json({id:'council-chatgpt-abcdef0123456789abcdef0123456789',state:'queued_for_approval',approved:false},{status:202});
  if(path.endsWith('/approve'))return Response.json({state:'approval_delivered'},{status:202});
  return Response.json({status:'waiting',output:null});
