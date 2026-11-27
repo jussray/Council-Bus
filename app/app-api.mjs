@@ -28,7 +28,7 @@ function validateEvidence(items){
  return out;
 }
 const dbReady=env=>env.COUNCIL_DB&&typeof env.COUNCIL_DB.prepare==='function';
-const routerReady=(env,seat)=>typeof env.COUNCIL_ROUTER?.fetch==='function'&&typeof env['ROUTER_API_KEY_'+seat.toUpperCase()]==='string'&&env['ROUTER_API_KEY_'+seat.toUpperCase()].length>0;
+const routerReady=env=>typeof env.COUNCIL_ROUTER?.fetch==='function';
 async function readRecord(env,owner,id){
  return env.COUNCIL_DB.prepare('SELECT id, owner_email, claim, evidence_json, claim_sha256, created_at FROM council_records WHERE id = ? AND owner_email = ?').bind(id,owner).first();
 }
@@ -37,11 +37,27 @@ async function readWorkflow(env,owner,id){
 }
 function workflowPath(id,suffix=''){return 'https://council.internal/v1/council/workflows/'+encodeURIComponent(id)+suffix}
 async function sendToRouter(env,request,seat,path,body,extraHeaders={}){
- if(!routerReady(env,seat))return null;
- const headers={'content-type':'application/json',authorization:'Bearer '+env['ROUTER_API_KEY_'+seat.toUpperCase()],'x-council-seat':seat,...extraHeaders};
+ if(!routerReady(env))return null;
+ // Never clone per-seat routing or provider secrets to Pages.
+ // Forward only the signed founder assertion over the private Cloudflare service binding.
+ // The Worker independently verifies its signature, exact audience and identity.
+ const signedFounder=request.headers.get('Cf-Access-Jwt-Assertion');
+ if(!signedFounder)return null;
+ const headers={'content-type':'application/json','Cf-Access-Jwt-Assertion':signedFounder,'x-council-seat':seat,...extraHeaders};
  try{
   return await env.COUNCIL_ROUTER.fetch(new Request(path,{method:body?'POST':'GET',headers,...(body?{body:JSON.stringify(body)}:{})}));
  }catch{return null}
+}
+async function readSeatReadiness(env,request){
+ const empty=SEATS.map(id=>({id,configured:false,runtimeVerified:false,authority:OWNER}));
+ if(!routerReady(env)||!request.headers.get('Cf-Access-Jwt-Assertion'))return empty;
+ const response=await sendToRouter(env,request,'chatgpt','https://council.internal/v1/council/readiness',null);
+ if(!response?.ok)return empty;
+ try{
+  const body=await response.json();
+  const entries=Array.isArray(body.seats)?body.seats:[];
+  return empty.map(seat=>({...seat,configured:entries.some(x=>x?.id===seat.id&&x?.configured===true)}));
+ }catch{return empty}
 }
 async function audit(env,owner,action,ref,data={}){
  try{await env.COUNCIL_DB.prepare('INSERT INTO council_events (id, owner_email, action, subject_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -63,8 +79,8 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
   if(!founder.ok)return fail(founder.status===503?503:401,founder.status===503?'identity_not_configured':'unauthorized');
   const owner=founder.email;
   if(path==='/api/session'&&request.method==='GET')return reply({identityVerified:true,email:owner,authority:OWNER,gate:'founder_verified'});
-  if(path==='/api/seats'&&request.method==='GET')return reply({seats:SEATS.map(id=>({id,configured:routerReady(env,id)&&Boolean(env['SEAT_MODEL_'+id.toUpperCase()]),runtimeVerified:false,authority:OWNER})),message:'Configured means bindings exist; it does not prove a successful provider exchange.'});
-  if(path==='/api/readiness'&&request.method==='GET')return reply({identityVerified:true,dbAvailable:Boolean(dbReady(env)),routerBound:typeof env.COUNCIL_ROUTER?.fetch==='function',executionAuthority:false,ledgerMode:'founder_drafts_not_git_sealed'});
+  if(path==='/api/seats'&&request.method==='GET')return reply({seats:await readSeatReadiness(env,request),message:'Configured means provider bindings exist on the Worker, not proof of a successful provider exchange.'});
+  if(path==='/api/readiness'&&request.method==='GET')return reply({identityVerified:true,dbAvailable:Boolean(dbReady(env)),routerBound:routerReady(env),executionAuthority:false,ledgerMode:'founder_drafts_not_git_sealed'});
   if(!dbReady(env))return fail(503,'ledger_unavailable');
   if(path==='/api/records'&&request.method==='GET'){
    try{
@@ -91,7 +107,7 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
    let record;
    try{record=await readRecord(env,owner,recordId)}catch{return fail(503,'ledger_unavailable')}
    if(!record)return fail(404,'record_not_found');
-   if(!routerReady(env,seat))return fail(503,'seat_not_ready');
+   if(!routerReady(env))return fail(503,'seat_not_ready');
    // A record/seat pair may only queue once. Replays return the same safe reference.
    try {const previous=await env.COUNCIL_DB.prepare('SELECT id, owner_email, record_id, seat, created_at FROM council_workflow_links WHERE record_id = ? AND seat = ? AND owner_email = ?').bind(recordId,seat,owner).first();
     if(previous)return reply({id:previous.id,recordId,seat,state:'queued_for_approval',approved:false,authority:OWNER},200);
@@ -115,7 +131,7 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
    try{link=await readWorkflow(env,owner,id)}catch{return fail(503,'ledger_unavailable')}
    if(!link)return fail(404,'workflow_not_found');
    const seat=link.seat;
-   if(!routerReady(env,seat))return fail(503,'seat_not_ready');
+   if(!routerReady(env))return fail(503,'seat_not_ready');
    if(approve){
     const b=await bodyJSON(request,200);
     if(b?.decision!=='approve')return fail(400,'explicit_approval_required');
