@@ -157,3 +157,19 @@ test('workflow submission records intent before dispatch and links a receipt ato
  assert.deepEqual(e.COUNCIL_DB.events.map(x=>x[2]),['draft_recorded','workflow_submission_intent','workflow_submitted']);
  assert.equal(e.COUNCIL_DB.workflows.size,1);
 });
+
+test('failed durable intent audit cannot dispatch a provider workflow',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK});
+ const record=await (await app(makeReq('/api/records','POST',{claim:'Evidence must have an audit before sending'}),e)).json();
+ const original=e.COUNCIL_DB.prepare.bind(e.COUNCIL_DB);
+ e.COUNCIL_DB.prepare=(sql)=>{
+  if(sql.includes('INSERT INTO council_events'))return{bind:()=>({run:async()=>({success:false})})};
+  return original(sql);
+ };
+ let sends=0;
+ e.COUNCIL_ROUTER.fetch=async()=>{sends++;return Response.json({id:'council-chatgpt-abcdef0123456789abcdef0123456789',approved:false},{status:202})};
+ const res=await app(makeReq('/api/workflows','POST',{recordId:record.id,seat:'chatgpt'}),e);
+ assert.equal(res.status,503);
+ assert.equal(sends,0);
+ assert.equal(e.COUNCIL_DB.workflows.size,0);
+});
