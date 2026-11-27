@@ -22,7 +22,9 @@ function signedJWT(changes={}){
 const valid=signedJWT();
 const invalidOwner=signedJWT({email:'another@example.invalid'});
 const invalidAudience=signedJWT({aud:['someone-else']});
-const invalidSignature=valid.slice(0,-1)+(valid.at(-1)==='A'?'B':'A');
+const badParts=valid.split('.');
+badParts[2]=(badParts[2][0]==='A'?'B':'A')+badParts[2].slice(1);
+const invalidSignature=badParts.join('.');
 const certFetch=async url=>{
  assert.equal(url,issuer+'/cdn-cgi/access/certs');
  return Response.json({keys:[jwk]});
