@@ -10,11 +10,13 @@ function db(){
  return {records,workflows,events,failAuditBatch:false,
  async batch(statements){
   if(!Array.isArray(statements)||statements.length!==2)throw Error('invalid batch');
-  const [draft,receipt]=statements;
-  if(!draft._sql?.includes('INSERT INTO council_records')||!receipt._sql?.includes('INSERT INTO council_events'))throw Error('unexpected batch');
-  const id=draft._args?.[0];await draft.run();
+  const [entity,receipt]=statements;
+  const isDraft=entity._sql?.includes('INSERT INTO council_records');
+  const isWorkflow=entity._sql?.includes('INSERT INTO council_workflow_links');
+  if((!isDraft&&!isWorkflow)||!receipt._sql?.includes('INSERT INTO council_events'))throw Error('unexpected batch');
+  const id=entity._args?.[0];await entity.run();
   try{if(this.failAuditBatch)throw Error('audit storage failed');await receipt.run();}
-  catch(error){records.delete(id);throw error}
+  catch(error){if(isDraft)records.delete(id);else workflows.delete(id);throw error}
   return [{success:true},{success:true}];
  },
  prepare(sql){let args=[];return {bind(...values){args=values;this._sql=sql;this._args=values;return this},async first(){
