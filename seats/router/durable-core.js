@@ -2,6 +2,7 @@
 // so the security, idempotency and approval gates can be tested with node --test.
 import { createCouncilRouter } from "./multi-router.js";
 import { SEATS } from "./seat-router.js";
+import { verifyFounderAccess } from "../../app/founder-access.mjs";
 
 const MAX_INPUT_CHARS = 48_000;
 const MAX_BODY_CHARS = 64_000;
@@ -17,6 +18,12 @@ function reply(body,status=200) {
 function failure(status,message) { return reply({error:{message}},status); }
 function knownSeat(name) {
   return typeof name === "string" && Object.prototype.hasOwnProperty.call(SEATS,name);
+}
+function seatConfigured(env, seat) {
+  if(!knownSeat(seat))return false;
+  const suffix=seat.toUpperCase(),provider=SEATS[seat];
+  const model=provider.model(String(env["SEAT_MODEL_"+suffix]||""));
+  return Boolean(model && env[provider.keyEnv] && env["ROUTER_API_KEY_"+suffix]);
 }
 function validMessages(messages) {
   if (!Array.isArray(messages) || messages.length<1 || messages.length>64) return false;
@@ -60,11 +67,22 @@ function validateJob(job) {
     && validMessages(job.messages);
 }
 
-export function createCouncilApplication({router=createCouncilRouter()}={}) {
+export function createCouncilApplication({router=createCouncilRouter(),authenticateFounder=verifyFounderAccess}={}) {
   return {
     async fetch(request,env={}) {
       const path=new URL(request.url).pathname;
       if(path==="/health") return router.fetch(request,env);
+      if(path==="/v1/council/readiness") {
+        if(request.method!=="GET")return failure(405,"Method not allowed");
+        let founder;
+        try {founder=await authenticateFounder(request,env);}
+        catch {return failure(503,"Founder authentication unavailable");}
+        if(!founder?.ok)return failure(founder?.status===503?503:403,
+          founder?.status===503?"Founder authentication unavailable":"Founder identity required");
+        return reply({seats:Object.keys(SEATS).map(id=>({
+          id,configured:seatConfigured(env,id),runtimeVerified:false
+        })),authority:{decisionOwner:"founder",grantsExecutionAuthority:false}});
+      }
       // Production must not bypass founder approval via the legacy synchronous API.
       if(path==="/v1/chat/completions")return failure(409,"Use approval-gated /v1/council/workflows");
       const create=path==="/v1/council/workflows";
@@ -74,7 +92,17 @@ export function createCouncilApplication({router=createCouncilRouter()}={}) {
       const seat=request.headers.get("x-council-seat")??"";
       if(!knownSeat(seat))return failure(400,"Unknown or missing Council seat");
       const auth=await authorize(request,env,seat);
-      if(auth!==200)return failure(auth,auth===401?"Unauthorized":"Seat authorization not configured");
+      let signedFounder=null;
+      if(auth!==200) {
+        // Founder-only Pages-to-Worker requests use an independently validated
+        // Access JWT, not a duplicated per-seat router secret.
+        if(!request.headers.get("Cf-Access-Jwt-Assertion"))
+          return failure(auth,auth===401?"Unauthorized":"Seat authorization not configured");
+        try {signedFounder=await authenticateFounder(request,env);}
+        catch {return failure(503,"Founder authentication unavailable");}
+        if(!signedFounder?.ok)return failure(signedFounder?.status===503?503:403,
+          signedFounder?.status===503?"Founder authentication unavailable":"Founder identity required");
+      }
 
       if(create){
         const idempotency=request.headers.get("idempotency-key")??"";
@@ -98,6 +126,16 @@ export function createCouncilApplication({router=createCouncilRouter()}={}) {
       catch{return failure(404,"Workflow not found");}
 
       if(match[2]==="approve"){
+        // Seat credentials authorize routing, NOT the founder's execution decision.
+        // The independent Cloudflare Access assertion is verified cryptographically,
+        // bound to the configured founder, and must be present at the moment of approval.
+        let founder=signedFounder;
+        if(!founder) {
+          try {founder=await authenticateFounder(request,env);}
+          catch {return failure(503,"Founder authentication unavailable");}
+        }
+        if(!founder?.ok)return failure(founder?.status===503?503:403,
+          founder?.status===503?"Founder authentication unavailable":"Founder identity required");
         const body=await parseBody(request);
         if(body?.decision!=="approve")return failure(400,"Explicit founder approval required");
         try{

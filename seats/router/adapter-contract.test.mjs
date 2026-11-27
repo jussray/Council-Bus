@@ -84,6 +84,7 @@ print(json.dumps({"id": actual, "idempotency": idempotency, "request": captured}
   };
   const app = createCouncilApplication({
     router: { fetch: async () => { throw new Error("paid provider must never run in contract test"); } },
+    authenticateFounder:async request=>request.headers.get("Cf-Access-Jwt-Assertion")==="valid-synthetic-founder-proof"?{ok:true,email:"founder@example.invalid"}:{ok:false,status:401},
   });
   const post = (url, body, token = KEY, extra = {}) => new Request(url, {
     method: "POST",
@@ -114,9 +115,11 @@ print(json.dumps({"id": actual, "idempotency": idempotency, "request": captured}
   assert.equal((await app.fetch(get(), env)).status, 200);
   assert.equal((await app.fetch(post(target + "/approve", { decision: "approve" }, "wrong"), env)).status, 401);
   assert.equal(events.length, 0);
-  assert.equal((await app.fetch(post(target + "/approve", { decision: "deny" }), env)).status, 400);
+  assert.equal((await app.fetch(post(target + "/approve", { decision: "approve" }), env)).status, 403);
   assert.equal(events.length, 0);
-  assert.equal((await app.fetch(post(target + "/approve", { decision: "approve" }), env)).status, 202);
+  assert.equal((await app.fetch(post(target + "/approve", { decision: "deny" }, KEY, {"Cf-Access-Jwt-Assertion":"valid-synthetic-founder-proof"}), env)).status, 400);
+  assert.equal(events.length, 0);
+  assert.equal((await app.fetch(post(target + "/approve", { decision: "approve" }, KEY, {"Cf-Access-Jwt-Assertion":"valid-synthetic-founder-proof"}), env)).status, 202);
   assert.equal(events.length, 1);
 
   let fakeProviderCalls = 0;
