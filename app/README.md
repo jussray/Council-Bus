@@ -28,6 +28,14 @@ This package introduces **real, server-verified identity gates** and a **private
 - **Private Pages:** `council-bus-founder` is Access-protected, configured on the feature branch until release, and binds the private `COUNCIL_DB` and `COUNCIL_ROUTER`. Only server-side signed-founder requests may reach those backends. Preview deployments are not authentication proof.
 - **Production release holds:** verify real Access login and owner-scoped record read/write before promoting the branch; separately deploy and check the founder-verified Council Worker; obtain explicit human approval before any provider execution; require independent GitHub ledger sealing for evidence claims. Merely having five seats configured is not a success receipt.
 
+## Founder workflow visibility and decision gates
+
+- Five-seat readiness has three truth states: **configured**, **not configured** (only after an authenticated complete Worker response), or **unknown** (Worker unavailable or did not report the seat). A failed backend read must never be represented as an absent provider configuration.
+- The Workspace displays a Workflow's current status and an allowlisted, bounded summary of its output. Internal Worker response fields such as raw provider bodies, tokens and arbitrary nested values are stripped server-side before any browser response. Completed model text is marked **INFERRED · UNSEALED**.
+- The **Explicitly approve** action starts disabled and requires a successful status inspection plus an explicit confirmation. A failed status read disables approval; a queue or draft receipt never implies a decision.
+- An independently RS256-signed founder Access assertion is verified on **both** Pages Functions and the Worker on protected requests. Per-seat bearer tokens alone cannot approve execution. No JWTs, credentials, or provider replies are committed.
+- Synthetic tests cover the Access JWT handoff, seat-token denial, output redaction, unknown readiness, and DOM behavior using a mock browser and network. These prove the checked code paths, **not** a real founder login, production Worker deployment, or any provider response.
+
 ## Testing
 
 `node --test app/*.test.mjs` runs local identity, authorization, evidence, seat, and queue security tests. `python3` + SQLite may validate migration triggers. GitHub checks must run on exact PR head; a green CI status does **not** establish production authentication, D1 binding, or real provider readiness.
