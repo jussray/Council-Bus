@@ -4,7 +4,7 @@ import {createFounderApi} from './app-api.mjs';
 const owner='founder@example.test';
 const OK=async()=>({ok:true,email:owner,sub:'founder-1',status:200});
 const NOT_OK=async()=>({ok:false,status:401,reason:'invalid_access_token'});
-const makeReq=(path,method='GET',body=null,headers={})=>new Request('https://app.test'+path,{method,headers:{...(body?{'content-type':'application/json'}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});
+const makeReq=(path,method='GET',body=null,headers={})=>new Request('https://app.test'+path,{method,headers:{'Cf-Access-Jwt-Assertion':'synthetic-signed-founder',...(body?{'content-type':'application/json'}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});
 function db(){
  const records=new Map(),workflows=new Map(),events=[];
  return {records,workflows,events,prepare(sql){let args=[];return {bind(...values){args=values;return this},async first(){
@@ -21,6 +21,7 @@ function db(){
 }
 const env=()=>({COUNCIL_DB:db(),COUNCIL_RATE_LIMITER:{limit:async()=>({success:true})},SEAT_MODEL_CHATGPT:'configured-model',ROUTER_API_KEY_CHATGPT:'server-only-token',COUNCIL_ROUTER:{fetch:async req=>{
  const path=new URL(req.url).pathname;
+ if(path==='/v1/council/readiness')return Response.json({seats:[{id:'chatgpt',configured:true,runtimeVerified:false}]});
  if(path==='/v1/council/workflows')return Response.json({id:'council-chatgpt-abcdef0123456789abcdef0123456789',state:'queued_for_approval',approved:false},{status:202});
  if(path.endsWith('/approve'))return Response.json({state:'approval_delivered'},{status:202});
  return Response.json({status:'waiting',output:null});
@@ -64,9 +65,9 @@ test('workflow queue is linked to an owner record but cannot auto-approve; appro
  const res=await app(makeReq('/api/workflows','POST',{recordId:record.id,seat:'chatgpt'},{'idempotency-key':'client-origin-unique'}),e);
  assert.equal(res.status,202);const job=await res.json();
  assert.equal(job.approved,false);assert.equal(seen.length,1);
- assert.equal(seen[0].headers.get('authorization'),'Bearer server-only-token');
- assert.equal(seen[0].headers.get('Cf-Access-Jwt-Assertion'),null);
- assert.equal((await app(makeReq('/api/workflows/'+job.id+'/approve','POST',{decision:'approve'}),e)).status,503); // fails without signed JWT
+ assert.equal(seen[0].headers.get('authorization'),null);
+ assert.equal(seen[0].headers.get('Cf-Access-Jwt-Assertion'),'synthetic-signed-founder');
+ assert.equal((await app(new Request('https://app.test/api/workflows/'+job.id+'/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({decision:'approve'})}),e)).status,503); // fails without signed JWT
 });
 test('cross-site POST and absent JSON type cannot reach database',async()=>{
  const e=env(),app=createFounderApi({authenticate:OK});
@@ -88,4 +89,33 @@ test('when a verified Access assertion exists, founder can explicitly approve vi
  const res=await app(makeReq('/api/workflows/'+submitted.id+'/approve','POST',{decision:'approve'},{'Cf-Access-Jwt-Assertion':'a.signed.cloudflare.jwt'}),e);
  assert.equal(res.status,202);
  assert.equal((await res.json()).state,'approval_delivered');
+});
+
+test('signed founder assertion reaches the internal router without cloning per-seat secrets onto Pages',async()=>{
+ const e=env(),calls=[];
+ delete e.ROUTER_API_KEY_CHATGPT;
+ e.COUNCIL_ROUTER.fetch=async req=>{calls.push(req);return Response.json({id:'council-chatgpt-abcdef0123456789abcdef0123456789',state:'queued_for_approval',approved:false},{status:202})};
+ const app=createFounderApi({authenticate:OK});
+ const record=await (await app(makeReq('/api/records','POST',{claim:'Founder-only seat request'}),e)).json();
+ const submitted=await app(makeReq('/api/workflows','POST',{recordId:record.id,seat:'chatgpt'},{'Cf-Access-Jwt-Assertion':'synthetic-signed-founder'}),e);
+ assert.equal(submitted.status,202);
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].headers.get('Cf-Access-Jwt-Assertion'),'synthetic-signed-founder');
+ assert.equal(calls[0].headers.get('authorization'),null);
+});
+
+test('five-seat readiness is read from protected Worker rather than guessed from Pages secrets',async()=>{
+ const e=env();delete e.ROUTER_API_KEY_CHATGPT;
+ const app=createFounderApi({authenticate:OK});
+ e.COUNCIL_ROUTER.fetch=async req=>{
+  assert.equal(new URL(req.url).pathname,'/v1/council/readiness');
+  assert.equal(req.headers.get('Cf-Access-Jwt-Assertion'),'synthetic-founder');
+  return Response.json({seats:[{id:'chatgpt',configured:true,runtimeVerified:false},{id:'claude',configured:false,runtimeVerified:false},{id:'deepseek',configured:false,runtimeVerified:false},{id:'muse',configured:false,runtimeVerified:false},{id:'perplexity',configured:false,runtimeVerified:false}]});
+ };
+ const res=await app(makeReq('/api/seats','GET',null,{'Cf-Access-Jwt-Assertion':'synthetic-founder'}),e);
+ assert.equal(res.status,200);
+ const body=await res.json();
+ assert.equal(body.seats.length,5);
+ assert.equal(body.seats.find(x=>x.id==='chatgpt').configured,true);
+ assert.equal(body.seats.find(x=>x.id==='claude').configured,false);
 });
