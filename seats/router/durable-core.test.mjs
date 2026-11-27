@@ -224,3 +224,33 @@ test("durable Workflow receipts persist only allowlisted fetch diagnostics",asyn
   assert.ok(!JSON.stringify(actual).includes("Bearer"));
  }
 });
+
+
+test("signed founder Access can queue and inspect without a cloned per-seat bearer token",async()=>{
+ const e=env(),app=api();
+ const signed=req("/v1/council/workflows",{token:"wrong-seat-token",founderAssertion:"test-founder-proof"});
+ const response=await app.fetch(signed,e);
+ assert.equal(response.status,202);
+ assert.equal(e.queued.length,1);
+ const denied=await app.fetch(req("/v1/council/workflows",{token:"wrong-seat-token",founderAssertion:"invalid-synthetic-assertion"}),e);
+ assert.equal(denied.status,403);
+ const id="council-chatgpt-abcdef0123456789abcdef0123456789";
+ const status=new Request("https://council.test/v1/council/workflows/"+id,{headers:{"x-council-seat":"chatgpt","Cf-Access-Jwt-Assertion":"test-founder-proof"}});
+ assert.equal((await app.fetch(status,e)).status,200);
+ assert.equal((await app.fetch(new Request("https://council.test/v1/council/workflows/"+id,{headers:{"x-council-seat":"chatgpt"}}),e)).status,401);
+});
+
+test("seat readiness requires signed founder Access and reports configuration only, not keys or live status",async()=>{
+ const e=env(),app=api(),url="https://council.test/v1/council/readiness";
+ const good=await app.fetch(new Request(url,{headers:{"Cf-Access-Jwt-Assertion":"test-founder-proof"}}),e);
+ assert.equal(good.status,200);
+ const result=await good.json();
+ assert.equal(result.seats.length,5);
+ assert.equal(result.seats.find(s=>s.id==="chatgpt").configured,true);
+ assert.equal(result.seats.find(s=>s.id==="claude").configured,false);
+ assert.equal(result.seats.every(s=>s.runtimeVerified===false),true);
+ assert.ok(!JSON.stringify(result).includes("route-token"));
+ assert.ok(!JSON.stringify(result).includes("provider-secret"));
+ assert.equal((await app.fetch(new Request(url),e)).status,403);
+ assert.equal((await app.fetch(new Request(url,{headers:{"Cf-Access-Jwt-Assertion":"bad"}}),e)).status,403);
+});
