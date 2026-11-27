@@ -60,8 +60,8 @@ async function readSeatReadiness(env,request){
  }catch{return empty}
 }
 async function audit(env,owner,action,ref,data={}){
- try{await env.COUNCIL_DB.prepare('INSERT INTO council_events (id, owner_email, action, subject_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
- .bind(crypto.randomUUID(),owner,action,ref,JSON.stringify(data),new Date().toISOString()).run();return true}catch{return false}
+ try{const result=await env.COUNCIL_DB.prepare('INSERT INTO council_events (id, owner_email, action, subject_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+ .bind(crypto.randomUUID(),owner,action,ref,JSON.stringify(data),new Date().toISOString()).run();return result?.success===true}catch{return false}
 }
 export function createFounderApi({authenticate=verifyFounderAccess}={}){
  return async function handle(request,env={}){
