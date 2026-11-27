@@ -1,0 +1,39 @@
+name: council-founder-app
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'functions/**'
+      - 'site/founder.html'
+      - 'site/founder.js'
+      - 'site/assets/**'
+      - 'db/**'
+      - '.github/workflows/council-founder-app.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'functions/**'
+      - 'site/founder.html'
+      - 'site/founder.js'
+      - 'site/assets/**'
+      - 'db/**'
+      - '.github/workflows/council-founder-app.yml'
+permissions:
+  contents: read
+jobs:
+  founder-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JWT and authenticated app regression suite
+        run: node --test app/*.test.mjs
+      - name: Frontend source syntax
+        run: node --check site/founder.js
+      - name: SQLite migration append-only invariants
+        run: python3 app/check_schema.py
