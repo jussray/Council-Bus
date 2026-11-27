@@ -4,6 +4,9 @@
   "main": "workflow-entry.js",
   "compatibility_date": "2026-11-18",
   "workers_dev": true,
+  // Preserve dashboard-managed variables when future production deploys run.
+  // Existing encrypted Worker secrets remain Cloudflare-managed.
+  "keep_vars": true,
   // Enable eligible Workers Trace Events for the account Logpush dataset.
   // Data export still requires a separate verified destination + Logpush job.
   "logpush": true,
