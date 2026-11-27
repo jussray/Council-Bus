@@ -49,15 +49,22 @@ async function sendToRouter(env,request,seat,path,body,extraHeaders={}){
  }catch{return null}
 }
 async function readSeatReadiness(env,request){
- const empty=SEATS.map(id=>({id,configured:false,runtimeVerified:false,authority:OWNER}));
- if(!routerReady(env)||!request.headers.get('Cf-Access-Jwt-Assertion'))return empty;
+ // A failed or partial Worker response is UNKNOWN, never "not configured".
+ const empty=SEATS.map(id=>({id,configured:null,runtimeVerified:false,authority:OWNER}));
+ const unavailable={seats:empty,routerStatus:'unavailable'};
+ if(!routerReady(env)||!request.headers.get('Cf-Access-Jwt-Assertion'))return unavailable;
  const response=await sendToRouter(env,request,'chatgpt','https://council.internal/v1/council/readiness',null);
- if(!response?.ok)return empty;
+ if(!response?.ok)return unavailable;
  try{
   const body=await response.json();
-  const entries=Array.isArray(body.seats)?body.seats:[];
-  return empty.map(seat=>({...seat,configured:entries.some(x=>x?.id===seat.id&&x?.configured===true)}));
- }catch{return empty}
+  if(!Array.isArray(body?.seats))return unavailable;
+  const list=empty.map(seat=>{
+   const entry=body.seats.find(x=>x?.id===seat.id && typeof x?.configured==='boolean');
+   return {...seat,configured:entry?entry.configured:null};
+  });
+  const observed=list.filter(s=>typeof s.configured==='boolean').length;
+  return observed===0?unavailable:{seats:list,routerStatus:observed===SEATS.length?'verified':'partial'};
+ }catch{return unavailable}
 }
 async function audit(env,owner,action,ref,data={}){
  try{const result=await env.COUNCIL_DB.prepare('INSERT INTO council_events (id, owner_email, action, subject_id, details_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -79,7 +86,7 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
   if(!founder.ok)return fail(founder.status===503?503:401,founder.status===503?'identity_not_configured':'unauthorized');
   const owner=founder.email;
   if(path==='/api/session'&&request.method==='GET')return reply({identityVerified:true,email:owner,authority:OWNER,gate:'founder_verified'});
-  if(path==='/api/seats'&&request.method==='GET')return reply({seats:await readSeatReadiness(env,request),message:'Configured means provider bindings exist on the Worker, not proof of a successful provider exchange.'});
+  if(path==='/api/seats'&&request.method==='GET')return reply({...await readSeatReadiness(env,request),message:'Configured means Worker bindings are present, not proof of execution. Unknown means Worker readiness could not be confirmed.'});
   if(path==='/api/readiness'&&request.method==='GET')return reply({identityVerified:true,dbAvailable:Boolean(dbReady(env)),routerBound:routerReady(env),executionAuthority:false,ledgerMode:'founder_drafts_not_git_sealed'});
   if(!dbReady(env))return fail(503,'ledger_unavailable');
   if(path==='/api/records'&&request.method==='GET'){
