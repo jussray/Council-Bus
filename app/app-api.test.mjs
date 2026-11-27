@@ -140,3 +140,18 @@ test('draft creation rolls back when its audit event cannot be committed',async(
  assert.equal(e.COUNCIL_DB.records.size,0);
  assert.equal(e.COUNCIL_DB.events.length,0);
 });
+
+test('workflow submission records intent before dispatch and links a receipt atomically',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK}),seen=[];
+ e.COUNCIL_ROUTER.fetch=async request=>{
+  seen.push({url:request.url,auditActions:e.COUNCIL_DB.events.map(x=>x[2])});
+  return Response.json({id:'council-chatgpt-abcdef0123456789abcdef0123456789',state:'queued_for_approval',approved:false},{status:202});
+ };
+ const record=await (await app(makeReq('/api/records','POST',{claim:'Evidence needs a durable receipt before queueing'}),e)).json();
+ const r=await app(makeReq('/api/workflows','POST',{recordId:record.id,seat:'chatgpt'}),e);
+ assert.equal(r.status,202);
+ assert.equal(seen.length,1);
+ assert.deepEqual(seen[0].auditActions,['draft_recorded','workflow_submission_intent']);
+ assert.deepEqual(e.COUNCIL_DB.events.map(x=>x[2]),['draft_recorded','workflow_submission_intent','workflow_submitted']);
+ assert.equal(e.COUNCIL_DB.workflows.size,1);
+});
