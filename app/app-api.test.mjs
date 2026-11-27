@@ -194,3 +194,37 @@ test('partial Worker readiness never invents unreported seat configuration',asyn
  assert.equal(report.seats.find(s=>s.id==='chatgpt').configured,true);
  assert.equal(report.seats.find(s=>s.id==='claude').configured,null);
 });
+
+test('workflow status strips raw provider responses, credentials and arbitrary Worker fields',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK});
+ const draft=await (await app(makeReq('/api/records','POST',{claim:'Verify a sourced statement'}),e)).json();
+ const receipt=await (await app(makeReq('/api/workflows','POST',{recordId:draft.id,seat:'chatgpt'}),e)).json();
+ e.COUNCIL_ROUTER.fetch=async req=>{
+  assert.equal(req.method,'GET');
+  return Response.json({status:'complete',extraPrivate:'DO_NOT_RETURN_PRIVATE',
+   output:{state:'completed',seat:'chatgpt',content:'Sanitized council observation',
+    provider:'openai',response_id:'synthetic-test-id',
+    raw:'SENSITIVE_PROVIDER_BODY',private_token:'TEST_ROUTER_KEY',nested:{secret:'DO_NOT_RETURN'}}});
+ };
+ const response=await app(makeReq('/api/workflows/'+receipt.id),e);
+ assert.equal(response.status,200);
+ const payload=await response.json();
+ assert.equal(payload.status,'complete');
+ assert.deepEqual(payload.output,{state:'completed',content:'Sanitized council observation',provider:'openai'});
+ assert.equal(JSON.stringify(payload).includes('SENSITIVE_PROVIDER_BODY'),false);
+ assert.equal(JSON.stringify(payload).includes('DO_NOT_RETURN'),false);
+ assert.equal(JSON.stringify(payload).includes('TEST_ROUTER_KEY'),false);
+});
+
+test('malformed workflow completion cannot be displayed as a verified answer',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK});
+ const draft=await (await app(makeReq('/api/records','POST',{claim:'Check a different source'}),e)).json();
+ const receipt=await (await app(makeReq('/api/workflows','POST',{recordId:draft.id,seat:'chatgpt'}),e)).json();
+ e.COUNCIL_ROUTER.fetch=async()=>Response.json({status:'complete',
+  output:{state:'completed',seat:'claude',content:'CROSS_SEAT_CONTENT',provider:'openai'}});
+ const res=await app(makeReq('/api/workflows/'+receipt.id),e);
+ assert.equal(res.status,200);
+ const payload=await res.json();
+ assert.equal(payload.output,null);
+ assert.equal(JSON.stringify(payload).includes('CROSS_SEAT_CONTENT'),false);
+});
