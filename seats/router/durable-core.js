@@ -2,6 +2,7 @@
 // so the security, idempotency and approval gates can be tested with node --test.
 import { createCouncilRouter } from "./multi-router.js";
 import { SEATS } from "./seat-router.js";
+import { verifyFounderAccess } from "../../app/founder-access.mjs";
 
 const MAX_INPUT_CHARS = 48_000;
 const MAX_BODY_CHARS = 64_000;
@@ -60,7 +61,7 @@ function validateJob(job) {
     && validMessages(job.messages);
 }
 
-export function createCouncilApplication({router=createCouncilRouter()}={}) {
+export function createCouncilApplication({router=createCouncilRouter(),authenticateFounder=verifyFounderAccess}={}) {
   return {
     async fetch(request,env={}) {
       const path=new URL(request.url).pathname;
@@ -98,6 +99,14 @@ export function createCouncilApplication({router=createCouncilRouter()}={}) {
       catch{return failure(404,"Workflow not found");}
 
       if(match[2]==="approve"){
+        // Seat credentials authorize routing, NOT the founder's execution decision.
+        // The independent Cloudflare Access assertion is verified cryptographically,
+        // bound to the configured founder, and must be present at the moment of approval.
+        let founder;
+        try { founder=await authenticateFounder(request,env); }
+        catch { return failure(503,"Founder authentication unavailable"); }
+        if(!founder?.ok)return failure(founder?.status===503?503:403,
+          founder?.status===503?"Founder authentication unavailable":"Founder identity required");
         const body=await parseBody(request);
         if(body?.decision!=="approve")return failure(400,"Explicit founder approval required");
         try{
