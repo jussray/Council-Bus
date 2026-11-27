@@ -173,3 +173,24 @@ test('failed durable intent audit cannot dispatch a provider workflow',async()=>
  assert.equal(sends,0);
  assert.equal(e.COUNCIL_DB.workflows.size,0);
 });
+
+test('unavailable Worker readiness reports UNKNOWN instead of falsely saying all five seats are unconfigured',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK});
+ e.COUNCIL_ROUTER.fetch=async()=>Response.json({error:'founder_identity_not_configured'},{status:503});
+ const res=await app(makeReq('/api/seats'),e);
+ assert.equal(res.status,200);
+ const report=await res.json();
+ assert.equal(report.routerStatus,'unavailable');
+ assert.equal(report.seats.length,5);
+ assert.equal(report.seats.every(s=>s.configured===null&&s.runtimeVerified===false),true);
+ assert.equal(report.seats.every(s=>s.authority.grantsExecutionAuthority===false),true);
+});
+
+test('partial Worker readiness never invents unreported seat configuration',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK});
+ e.COUNCIL_ROUTER.fetch=async()=>Response.json({seats:[{id:'chatgpt',configured:true}]});
+ const report=await (await app(makeReq('/api/seats'),e)).json();
+ assert.equal(report.routerStatus,'partial');
+ assert.equal(report.seats.find(s=>s.id==='chatgpt').configured,true);
+ assert.equal(report.seats.find(s=>s.id==='claude').configured,null);
+});
