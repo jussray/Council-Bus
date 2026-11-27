@@ -499,46 +499,70 @@ dialog{
 }
 .workspace input::placeholder{color:#e7dfeb;opacity:.91}
 
-/* Rotating quotes are typography over the real scenery — no card or playback UI. */
-#view-welcome .scene-quote-line{
-  display:block; position:relative;
-  width:min(800px,calc(100% - 6px));
-  min-height:68px;
-  margin:0 auto;
-  padding:10px 6px;
-  background:none !important;
-  border:0 !important;
-  border-radius:0 !important;
-  box-shadow:none !important;
+/* Council-Bus ambient quote: bare typography painted over the landscape.
+   It is absolutely positioned, not a card and not a sibling occupying row space. */
+.cinematic .hero-welcome,.cinematic .auth-shell{position:relative;isolation:isolate}
+.cinematic .hero-welcome::before,.cinematic .auth-shell::before{
+  display:none !important;content:none !important;
+}
+.cinematic .ambient-quote{
+  display:block;
+  position:absolute;
+  top:clamp(38px,8.5vh,90px);
+  left:clamp(22px,3.2vw,70px);
+  z-index:2;
+  width:min(345px,23vw);
+  max-width:calc(100% - 28px);
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:none;
+  box-shadow:none;
   text-align:center;
+  pointer-events:none;
+  color:#fff6e5;
+  font:600 clamp(1.03rem,1.6vw,1.45rem)/1.42 Georgia,serif;
+  text-shadow:0 2px 7px rgba(2,8,25,.96),0 0 24px rgba(2,8,25,.86);
 }
-#view-welcome .scene-quote-eyebrow{
-  display:block;margin:0 0 8px;
-  color:#ffe7b8;
-  font:750 .65rem/1.35 system-ui,sans-serif;
-  letter-spacing:.15em;
-  text-shadow:0 2px 11px rgba(3,12,27,.96);
+.cinematic .ambient-quote.quote-reveal{animation:councilQuoteReveal .6s ease both}
+@keyframes councilQuoteReveal{
+  from{opacity:.25;transform:translateY(5px)}
+  to{opacity:1;transform:translateY(0)}
 }
-#view-welcome .scene-quote-text{
-  margin:0 auto;
-  max-width:43ch;
-  color:#fffaf3;
-  font:600 clamp(1.06rem,2vw,1.45rem)/1.36 Georgia,serif;
-  text-shadow:0 2px 9px rgba(0,5,17,.96),0 0 21px rgba(0,5,17,.8);
+/* At tablet sizes there is no safe left rail: float the words in the
+   mountain/sky above the real panel, without inserting another element. */
+@media(max-width:1180px){
+  .cinematic .hero-welcome{padding-top:132px}
+  .cinematic .auth-shell{padding-top:132px;align-items:flex-start}
+  .cinematic .ambient-quote{
+    left:50%;top:19px;
+    width:min(670px,calc(100% - 36px));
+    text-align:center;
+    transform:translateX(-50%);
+  }
+  .cinematic .ambient-quote.quote-reveal{animation:councilQuoteTabletReveal .6s ease both}
+  @keyframes councilQuoteTabletReveal{
+    from{opacity:.25;transform:translate(-50%,5px)}
+    to{opacity:1;transform:translate(-50%,0)}
+  }
 }
-#view-welcome .scene-quote-text.quote-reveal{animation:councilQuoteReveal .6s ease both}
-@keyframes councilQuoteReveal{from{opacity:.18;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:620px){
-  /* No extra scenic photo frame above the welcome glass. */
-  #view-welcome .hero-welcome::before{content:none!important;display:none!important}
-  #view-welcome .scene-quote-line{min-height:75px;width:100%;padding:12px 5px 3px}
-  #view-welcome .scene-quote-eyebrow{font-size:.58rem;letter-spacing:.13em;margin-bottom:7px}
-  #view-welcome .scene-quote-text{max-width:31ch;font-size:clamp(1.04rem,4.6vw,1.22rem)}
+  .cinematic .hero-welcome{padding:112px 14px 46px;gap:0}
+  .cinematic .auth-shell{padding:112px 18px 62px;gap:0}
+  .cinematic .ambient-quote{
+    left:14px;top:15px;
+    width:calc(100% - 28px);
+    font-size:clamp(.98rem,4.3vw,1.15rem);
+    line-height:1.32;
+    transform:none;
+    text-align:center;
+  }
+  .cinematic .ambient-quote.quote-reveal{animation:councilQuoteReveal .6s ease both}
 }
-@media(prefers-reduced-motion:reduce){#view-welcome .scene-quote-text.quote-reveal{animation:none!important}}
-
-
-
+@media(prefers-reduced-motion:reduce){
+  .cinematic .ambient-quote.quote-reveal{animation:none!important}
+}
 
 /* More transparent glass across the rest of the interface */
 .welcome-card,
@@ -574,25 +598,22 @@ dialog{
   <section id="view-welcome" data-testid="view-welcome" class="screen cinematic active welcome">
     <div class="preview-ribbon">Interactive design prototype · No live account or provider connections</div>
     <header class="site-nav"><button class="brand" data-go="welcome" aria-label="Council-Bus home"><span class="brand-company">Juss &amp; Co.</span><span class="brand-divider"></span><svg class="mark"><use href="#compass-logo"></use></svg><span><span class="brand-title">Council-Bus</span><span class="brand-sub">EVIDENCE BEFORE AUTHORITY</span></span></button><nav class="nav-links" aria-label="Public navigation"><button class="nav-link" data-go="welcome">Overview</button><button class="nav-link" data-modal="how">How It Works</button><button class="nav-link" data-modal="security">Security</button><button class="nav-link" data-modal="support">Support</button><button class="nav-outline" data-go="login">♙ Founder Access</button></nav></header>
-    <main class="hero-welcome"><section id="scene-quote-line" class="scene-quote-line" aria-label="Automatically rotating Council-Bus quotes">
-  <span class="scene-quote-eyebrow">THOUGHTS FROM THE COUNCIL</span>
-  <blockquote id="scene-quote-text" class="scene-quote-text" aria-live="off">A question becomes powerful when its evidence can be traced.</blockquote>
-</section><div class="welcome-card"><div class="stack-mark"><svg class="mark"><use href="#compass-logo"></use></svg></div><div class="eyebrow">Juss &amp; Co. · The Council Network</div><h1 class="serif">Council-Bus</h1><p class="tagline">EVIDENCE BEFORE AUTHORITY</p><div class="divider"></div><h2 class="serif">Welcome to the Council</h2><p class="intro">Five perspectives. One traceable record. A refined space for questions, evidence, and accountable decisions—without granting AI the authority to approve or execute.</p><div class="welcome-actions"><button class="btn btn-navy" data-go="login">Log In</button><button class="btn btn-gold" data-go="signup">Sign Up</button><button class="btn btn-ghost" data-go="workspace">Explore Preview Workspace</button></div><div class="feature-strip" aria-label="Explore the council"><button class="feature-tile" data-modal="evidence"><span class="feature-icon">▤</span>Collect Evidence</button><button class="feature-tile" data-modal="analysis"><span class="feature-icon">⌕</span>Analyze with AI</button><button class="feature-tile" data-modal="counsel"><span class="feature-icon">♧</span>Counsel Across Seats</button><button class="feature-tile" data-modal="authority"><span class="feature-icon">⚖</span>Founder Decides</button><button class="feature-tile" data-modal="records"><span class="feature-icon">◇</span>Record and Verify</button></div><p class="fineprint">Preview only. No credentials are verified, no messages are sent to GitHub, and no AI provider requests are made.</p></div></main>
+    <main class="hero-welcome"><blockquote id="scene-quote-text" class="ambient-quote" aria-label="Council-Bus rotating quote" aria-live="off">A question becomes powerful when its evidence can be traced.</blockquote><div class="welcome-card"><div class="stack-mark"><svg class="mark"><use href="#compass-logo"></use></svg></div><div class="eyebrow">Juss &amp; Co. · The Council Network</div><h1 class="serif">Council-Bus</h1><p class="tagline">EVIDENCE BEFORE AUTHORITY</p><div class="divider"></div><h2 class="serif">Welcome to the Council</h2><p class="intro">Five perspectives. One traceable record. A refined space for questions, evidence, and accountable decisions—without granting AI the authority to approve or execute.</p><div class="welcome-actions"><button class="btn btn-navy" data-go="login">Log In</button><button class="btn btn-gold" data-go="signup">Sign Up</button><button class="btn btn-ghost" data-go="workspace">Explore Preview Workspace</button></div><div class="feature-strip" aria-label="Explore the council"><button class="feature-tile" data-modal="evidence"><span class="feature-icon">▤</span>Collect Evidence</button><button class="feature-tile" data-modal="analysis"><span class="feature-icon">⌕</span>Analyze with AI</button><button class="feature-tile" data-modal="counsel"><span class="feature-icon">♧</span>Counsel Across Seats</button><button class="feature-tile" data-modal="authority"><span class="feature-icon">⚖</span>Founder Decides</button><button class="feature-tile" data-modal="records"><span class="feature-icon">◇</span>Record and Verify</button></div><p class="fineprint">Preview only. No credentials are verified, no messages are sent to GitHub, and no AI provider requests are made.</p></div></main>
   </section>
   <section id="view-login" data-testid="view-login" class="screen cinematic login">
     <div class="preview-ribbon">Login interaction preview · Inputs stay on this device</div>
     <header class="site-nav"><button class="brand" data-go="welcome"><span class="brand-company">Juss &amp; Co.</span><span class="brand-divider"></span><svg class="mark"><use href="#compass-logo"></use></svg><span><span class="brand-title">Council-Bus</span><span class="brand-sub">EVIDENCE BEFORE AUTHORITY</span></span></button><nav class="nav-links"><button class="nav-link" data-go="welcome">Home</button><button class="nav-link" data-modal="security">Security</button><button class="nav-link" data-modal="support">Support</button><button class="nav-outline" data-go="signup">Sign Up</button></nav></header>
-    <main class="auth-shell"><div class="auth-card"><div class="auth-header"><svg class="mark"><use href="#compass-logo"></use></svg><h1 class="serif">Council-Bus</h1><div class="eyebrow">EVIDENCE BEFORE AUTHORITY</div><h2 class="serif">Welcome Back</h2><p>Enter the Council. This screen demonstrates the login journey without connecting an identity provider.</p></div><form id="login-form" novalidate autocomplete="off"><label for="login-email">Email address</label><input id="login-email" data-testid="login-email" class="input" type="email" inputmode="email" placeholder="you@example.com" autocomplete="off" maxlength="140" /><label for="login-password">Password</label><div class="password-wrap"><input id="login-password" data-testid="login-password" class="input" type="password" placeholder="Enter a preview password" autocomplete="off" maxlength="128" /><button type="button" class="eye" data-toggle="login-password" aria-label="Show password">Show</button></div><div class="auth-actions"><label class="checkbox-label"><input type="checkbox" id="remember-demo" /> Keep me signed in</label><button type="button" class="text-link" data-go="reset">Forgot password?</button></div><div class="auth-error" id="login-error" data-testid="login-error" aria-live="polite"></div><button class="btn btn-gold auth-submit" type="submit" data-testid="login-submit">Log In →</button></form><div class="auth-separator">or</div><div class="social-row"><button class="social-btn" data-provider="Google">🌐 Continue with Google</button><button class="social-btn" data-provider="Apple">● Continue with Apple</button></div><div class="auth-bottom">New to Council-Bus? <button class="text-link" data-go="signup">Sign Up</button></div><button class="back-nav" data-go="welcome">Back to Welcome</button><p class="auth-safe">Demo authentication is simulated; no password is stored, transmitted, or checked against a real account.</p></div></main>
+    <main class="auth-shell"><blockquote class="ambient-quote" aria-label="Council-Bus rotating quote" aria-live="off">A question becomes powerful when its evidence can be traced.</blockquote><div class="auth-card"><div class="auth-header"><svg class="mark"><use href="#compass-logo"></use></svg><h1 class="serif">Council-Bus</h1><div class="eyebrow">EVIDENCE BEFORE AUTHORITY</div><h2 class="serif">Welcome Back</h2><p>Enter the Council. This screen demonstrates the login journey without connecting an identity provider.</p></div><form id="login-form" novalidate autocomplete="off"><label for="login-email">Email address</label><input id="login-email" data-testid="login-email" class="input" type="email" inputmode="email" placeholder="you@example.com" autocomplete="off" maxlength="140" /><label for="login-password">Password</label><div class="password-wrap"><input id="login-password" data-testid="login-password" class="input" type="password" placeholder="Enter a preview password" autocomplete="off" maxlength="128" /><button type="button" class="eye" data-toggle="login-password" aria-label="Show password">Show</button></div><div class="auth-actions"><label class="checkbox-label"><input type="checkbox" id="remember-demo" /> Keep me signed in</label><button type="button" class="text-link" data-go="reset">Forgot password?</button></div><div class="auth-error" id="login-error" data-testid="login-error" aria-live="polite"></div><button class="btn btn-gold auth-submit" type="submit" data-testid="login-submit">Log In →</button></form><div class="auth-separator">or</div><div class="social-row"><button class="social-btn" data-provider="Google">🌐 Continue with Google</button><button class="social-btn" data-provider="Apple">● Continue with Apple</button></div><div class="auth-bottom">New to Council-Bus? <button class="text-link" data-go="signup">Sign Up</button></div><button class="back-nav" data-go="welcome">Back to Welcome</button><p class="auth-safe">Demo authentication is simulated; no password is stored, transmitted, or checked against a real account.</p></div></main>
   </section>
   <section id="view-signup" data-testid="view-signup" class="screen cinematic signup">
     <div class="preview-ribbon">Sign up interaction preview · No real account is created</div>
     <header class="site-nav"><button class="brand" data-go="welcome"><span class="brand-company">Juss &amp; Co.</span><span class="brand-divider"></span><svg class="mark"><use href="#compass-logo"></use></svg><span><span class="brand-title">Council-Bus</span><span class="brand-sub">EVIDENCE BEFORE AUTHORITY</span></span></button><nav class="nav-links"><button class="nav-link" data-go="welcome">Home</button><button class="nav-link" data-modal="how">About</button><button class="nav-link" data-modal="security">Security</button><button class="nav-outline" data-go="login">Log In</button></nav></header>
-    <main class="auth-shell"><div class="auth-card"><div class="auth-header"><svg class="mark"><use href="#compass-logo"></use></svg><h1 class="serif">Council-Bus</h1><div class="eyebrow">EVIDENCE BEFORE AUTHORITY</div><h2 class="serif">Create Your Account</h2><p>Preview the account creation flow. Real signup and identity verification are not connected.</p></div><form id="signup-form" novalidate autocomplete="off"><label for="signup-name">Full Name</label><input id="signup-name" data-testid="signup-name" class="input" type="text" placeholder="Name for your preview" maxlength="90" autocomplete="off" /><label for="signup-email">Email Address</label><input id="signup-email" data-testid="signup-email" class="input" type="email" placeholder="you@example.com" maxlength="140" autocomplete="off" /><label for="signup-password">Password</label><div class="password-wrap"><input id="signup-password" data-testid="signup-password" class="input" type="password" placeholder="8+ characters for this demo" maxlength="128" autocomplete="off" /><button type="button" class="eye" data-toggle="signup-password" aria-label="Show password">Show</button></div><label for="signup-confirm">Confirm Password</label><div class="password-wrap"><input id="signup-confirm" data-testid="signup-confirm" class="input" type="password" placeholder="Repeat demo password" maxlength="128" autocomplete="off" /><button type="button" class="eye" data-toggle="signup-confirm" aria-label="Show password">Show</button></div><div class="auth-actions"><label class="checkbox-label"><input type="checkbox" id="signup-agree" data-testid="signup-agree" /> I accept the <button type="button" class="text-link" data-modal="terms">preview terms</button></label></div><div class="auth-error" id="signup-error" data-testid="signup-error" aria-live="polite"></div><button type="submit" class="btn btn-navy auth-submit" data-testid="signup-submit">Create Preview Account →</button></form><div class="auth-bottom">Already have an account? <button class="text-link" data-go="login">Sign In</button></div><button class="back-nav" data-go="welcome">Back to Welcome</button><p class="auth-safe">No real account is created. Passwords are discarded immediately after form validation.</p></div></main>
+    <main class="auth-shell"><blockquote class="ambient-quote" aria-label="Council-Bus rotating quote" aria-live="off">A question becomes powerful when its evidence can be traced.</blockquote><div class="auth-card"><div class="auth-header"><svg class="mark"><use href="#compass-logo"></use></svg><h1 class="serif">Council-Bus</h1><div class="eyebrow">EVIDENCE BEFORE AUTHORITY</div><h2 class="serif">Create Your Account</h2><p>Preview the account creation flow. Real signup and identity verification are not connected.</p></div><form id="signup-form" novalidate autocomplete="off"><label for="signup-name">Full Name</label><input id="signup-name" data-testid="signup-name" class="input" type="text" placeholder="Name for your preview" maxlength="90" autocomplete="off" /><label for="signup-email">Email Address</label><input id="signup-email" data-testid="signup-email" class="input" type="email" placeholder="you@example.com" maxlength="140" autocomplete="off" /><label for="signup-password">Password</label><div class="password-wrap"><input id="signup-password" data-testid="signup-password" class="input" type="password" placeholder="8+ characters for this demo" maxlength="128" autocomplete="off" /><button type="button" class="eye" data-toggle="signup-password" aria-label="Show password">Show</button></div><label for="signup-confirm">Confirm Password</label><div class="password-wrap"><input id="signup-confirm" data-testid="signup-confirm" class="input" type="password" placeholder="Repeat demo password" maxlength="128" autocomplete="off" /><button type="button" class="eye" data-toggle="signup-confirm" aria-label="Show password">Show</button></div><div class="auth-actions"><label class="checkbox-label"><input type="checkbox" id="signup-agree" data-testid="signup-agree" /> I accept the <button type="button" class="text-link" data-modal="terms">preview terms</button></label></div><div class="auth-error" id="signup-error" data-testid="signup-error" aria-live="polite"></div><button type="submit" class="btn btn-navy auth-submit" data-testid="signup-submit">Create Preview Account →</button></form><div class="auth-bottom">Already have an account? <button class="text-link" data-go="login">Sign In</button></div><button class="back-nav" data-go="welcome">Back to Welcome</button><p class="auth-safe">No real account is created. Passwords are discarded immediately after form validation.</p></div></main>
   </section>
   <section id="view-reset" data-testid="view-reset" class="screen cinematic reset">
     <div class="preview-ribbon">Password recovery demonstration · No email delivery</div>
     <header class="site-nav"><button class="brand" data-go="welcome"><svg class="mark"><use href="#compass-logo"></use></svg><span><span class="brand-title">Council-Bus</span><span class="brand-sub">EVIDENCE BEFORE AUTHORITY</span></span></button><nav class="nav-links"><button class="nav-link" data-go="welcome">Home</button><button class="nav-outline" data-go="login">Log In</button></nav></header>
-    <main class="auth-shell"><div class="auth-card"><div class="auth-header"><svg class="mark"><use href="#compass-logo"></use></svg><h1 class="serif">Password Recovery</h1><p>See the recovery experience. This preview never sends a password-reset email.</p></div><form id="reset-form" novalidate><label for="reset-email">Email address</label><input id="reset-email" data-testid="reset-email" class="input" type="email" placeholder="you@example.com" autocomplete="off" maxlength="140" /><p id="reset-message" data-testid="reset-message" class="auth-error" aria-live="polite"></p><button type="submit" class="btn btn-navy auth-submit" data-testid="reset-submit">Preview Recovery →</button></form><button class="back-nav" data-go="login">Back to Log In</button></div></main>
+    <main class="auth-shell"><blockquote class="ambient-quote" aria-label="Council-Bus rotating quote" aria-live="off">A question becomes powerful when its evidence can be traced.</blockquote><div class="auth-card"><div class="auth-header"><svg class="mark"><use href="#compass-logo"></use></svg><h1 class="serif">Password Recovery</h1><p>See the recovery experience. This preview never sends a password-reset email.</p></div><form id="reset-form" novalidate><label for="reset-email">Email address</label><input id="reset-email" data-testid="reset-email" class="input" type="email" placeholder="you@example.com" autocomplete="off" maxlength="140" /><p id="reset-message" data-testid="reset-message" class="auth-error" aria-live="polite"></p><button type="submit" class="btn btn-navy auth-submit" data-testid="reset-submit">Preview Recovery →</button></form><button class="back-nav" data-go="login">Back to Log In</button></div></main>
   </section>
   <section id="view-workspace" data-testid="view-workspace" class="screen workspace">
     <header class="work-header"><button class="brand" data-go="welcome"><svg class="mark"><use href="#compass-logo"></use></svg><span><span class="brand-title">Council-Bus</span><span class="brand-sub">EVIDENCE BEFORE AUTHORITY</span></span></button><div class="header-controls"><span class="demo-chip">PREVIEW MODE</span><button class="btn btn-ghost btn-small menu-toggle" id="menu-toggle">☰ Menu</button><button class="btn btn-ghost btn-small" data-modal="help">Help</button><button class="btn btn-navy btn-small" id="signout">Sign out</button></div></header>
@@ -696,13 +717,11 @@ binding();const initial=location.hash.replace('#','');go(VIEWS.includes(initial)
 </script>
 
 <script>
-/* Local-only autonomous quotes: no controls, network, storage, or authority. */
+/* Local-only autonomous quotes on public scenery: no card, controls, network or storage. */
 (()=>{
   'use strict';
-  const line=document.getElementById('scene-quote-line');
-  const welcome=document.getElementById('view-welcome');
-  const text=document.getElementById('scene-quote-text');
-  if(!line || !welcome || !text) return;
+  const surfaces=Array.from(document.querySelectorAll('.cinematic .ambient-quote'));
+  if(surfaces.length!==4)return;
   const quotes=[
     'A question becomes powerful when its evidence can be traced.',
     'Five perspectives. One record. No borrowed authority.',
@@ -715,22 +734,26 @@ binding();const initial=location.hash.replace('#','');go(VIEWS.includes(initial)
   let current=0;
   let timer=null;
   function eligible(){
-    return !document.hidden && welcome.classList.contains('active') &&
+    return !document.hidden && !!document.querySelector('.cinematic.active') &&
       !document.body.classList.contains('scene-focus');
   }
   function reschedule(){
     if(timer!==null){clearTimeout(timer);timer=null;}
-    if(eligible()) timer=setTimeout(rotate,7000);
+    if(eligible())timer=setTimeout(rotate,7000);
   }
   function rotate(){
     current=(current+1)%quotes.length;
-    text.classList.remove('quote-reveal');
-    text.textContent=quotes[current];
-    if(!reduced.matches){void text.offsetWidth;text.classList.add('quote-reveal');}
+    for(const surface of surfaces){
+      surface.classList.remove('quote-reveal');
+      surface.textContent=quotes[current];
+      if(!reduced.matches){void surface.offsetWidth;surface.classList.add('quote-reveal');}
+    }
     reschedule();
   }
   document.addEventListener('visibilitychange',reschedule);
-  new MutationObserver(reschedule).observe(welcome,{attributes:true,attributeFilter:['class']});
+  for(const screen of document.querySelectorAll('.cinematic')){
+    new MutationObserver(reschedule).observe(screen,{attributes:true,attributeFilter:['class']});
+  }
   new MutationObserver(reschedule).observe(document.body,{attributes:true,attributeFilter:['class']});
   window.addEventListener('pageshow',reschedule);
   reschedule();
