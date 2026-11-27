@@ -7,7 +7,17 @@ const NOT_OK=async()=>({ok:false,status:401,reason:'invalid_access_token'});
 const makeReq=(path,method='GET',body=null,headers={})=>new Request('https://app.test'+path,{method,headers:{'Cf-Access-Jwt-Assertion':'synthetic-signed-founder',...(body?{'content-type':'application/json'}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});
 function db(){
  const records=new Map(),workflows=new Map(),events=[];
- return {records,workflows,events,prepare(sql){let args=[];return {bind(...values){args=values;return this},async first(){
+ return {records,workflows,events,failAuditBatch:false,
+ async batch(statements){
+  if(!Array.isArray(statements)||statements.length!==2)throw Error('invalid batch');
+  const [draft,receipt]=statements;
+  if(!draft._sql?.includes('INSERT INTO council_records')||!receipt._sql?.includes('INSERT INTO council_events'))throw Error('unexpected batch');
+  const id=draft._args?.[0];await draft.run();
+  try{if(this.failAuditBatch)throw Error('audit storage failed');await receipt.run();}
+  catch(error){records.delete(id);throw error}
+  return [{success:true},{success:true}];
+ },
+ prepare(sql){let args=[];return {bind(...values){args=values;this._sql=sql;this._args=values;return this},async first(){
   if(sql.includes('FROM council_records WHERE id = ?'))return records.get(args[0])?.owner_email===args[1]?records.get(args[0]):null;
   if(sql.includes('FROM council_workflow_links WHERE id = ?'))return workflows.get(args[0])?.owner_email===args[1]?workflows.get(args[0]):null;
   if(sql.includes('FROM council_workflow_links WHERE record_id = ?'))return [...workflows.values()].find(w=>w.record_id===args[0]&&w.seat===args[1]&&w.owner_email===args[2])||null;
@@ -48,6 +58,8 @@ test('record creation persists owner-scoped UNKNOWN/unsealed claim and evidence;
  assert.equal(r.status,201);const item=await r.json();
  assert.equal(item.label,'UNKNOWN');assert.equal(item.sealed,false);assert.equal(item.authority.grantsExecutionAuthority,false);
  assert.equal(e.COUNCIL_DB.records.size,1);
+ assert.equal(e.COUNCIL_DB.events.length,1);
+ assert.equal(e.COUNCIL_DB.events[0][2],'draft_recorded');
  assert.equal((await app(makeReq('/api/records','GET'),e)).status,200);
 });
 test('rejects dangerous evidence, oversize payloads and absent D1',async()=>{
@@ -118,4 +130,13 @@ test('five-seat readiness is read from protected Worker rather than guessed from
  assert.equal(body.seats.length,5);
  assert.equal(body.seats.find(x=>x.id==='chatgpt').configured,true);
  assert.equal(body.seats.find(x=>x.id==='claude').configured,false);
+});
+
+test('draft creation rolls back when its audit event cannot be committed',async()=>{
+ const e=env(),app=createFounderApi({authenticate:OK});
+ e.COUNCIL_DB.failAuditBatch=true;
+ const res=await app(makeReq('/api/records','POST',{claim:'A recorded claim must have an audit receipt'}),e);
+ assert.equal(res.status,503);
+ assert.equal(e.COUNCIL_DB.records.size,0);
+ assert.equal(e.COUNCIL_DB.events.length,0);
 });
