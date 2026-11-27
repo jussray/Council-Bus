@@ -25,14 +25,14 @@ function env() {
     queued, created, workflowEvents,
   };
 }
-function req(path, {seat="chatgpt", token=key, body={messages:[{role:"user",content:"Only a test"}]}, idempotency="unique-request-100"}={}) {
+function req(path, {seat="chatgpt", token=key, body={messages:[{role:"user",content:"Only a test"}]}, idempotency="unique-request-100",founderAssertion=null}={}) {
   return new Request("https://council.test" + path, {
     method: "POST",
-    headers: {"content-type":"application/json","x-council-seat":seat,authorization:"Bearer "+token,"idempotency-key":idempotency},
+    headers: {"content-type":"application/json","x-council-seat":seat,authorization:"Bearer "+token,"idempotency-key":idempotency,...(founderAssertion?{"Cf-Access-Jwt-Assertion":founderAssertion}:{})},
     body:JSON.stringify(body),
   });
 }
-const api = () => createCouncilApplication({router:{fetch: async()=>{throw Error("DIRECT PROVIDER BYPASS")}}});
+const api = () => createCouncilApplication({router:{fetch: async()=>{throw Error("DIRECT PROVIDER BYPASS")}},authenticateFounder: async request => request.headers.get("Cf-Access-Jwt-Assertion")==="test-founder-proof"?{ok:true,email:"founder@example.invalid"}:{ok:false,status:401}});
 
 test("production entrypoint rejects direct model execution; durable intake is authentication gated",async()=>{
   const e=env(), app=api();
@@ -73,7 +73,9 @@ test("approvals require matching seat token and identity, and may not cross seat
  assert.equal((await app.fetch(req("/v1/council/workflows/"+id+"/approve",{token:"wrong"}),e)).status,401);
  assert.equal((await app.fetch(req("/v1/council/workflows/council-claude-abcdef0123456789abcdef0123456789/approve"),e)).status,403);
  assert.equal(e.workflowEvents.length,0);
- const good=await app.fetch(req("/v1/council/workflows/"+id+"/approve",{body:{decision:"approve"}}),e);
+ assert.equal((await app.fetch(req("/v1/council/workflows/"+id+"/approve",{body:{decision:"approve"}}),e)).status,403);
+ assert.equal(e.workflowEvents.length,0);
+ const good=await app.fetch(req("/v1/council/workflows/"+id+"/approve",{body:{decision:"approve"},founderAssertion:"test-founder-proof"}),e);
  assert.equal(good.status,202);
  assert.deepEqual(e.workflowEvents,[{type:"founder-approved",payload:{decision:"approve",seat:"chatgpt",instanceId:id}}]);
 });
