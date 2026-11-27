@@ -37,7 +37,10 @@ class PublicSiteChecker(HTMLParser):
             self.ids.add(data["id"])
         if tag == "a":
             href = data.get("href") or ""
-            if href.startswith("#"):
+            if href == "preview.html":
+                if not Path("site/preview.html").is_file():
+                    self.errors.append("preview file missing")
+            elif href.startswith("#"):
                 self.refs.add(href[1:])
             elif not href.startswith((ALLOWED_EXTERNAL_PREFIX + "/", ALLOWED_EXTERNAL_PREFIX + "#")) and href != ALLOWED_EXTERNAL_PREFIX:
                 self.errors.append("unapproved outbound link: " + href)
