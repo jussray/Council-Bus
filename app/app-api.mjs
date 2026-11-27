@@ -29,6 +29,28 @@ function validateEvidence(items){
 }
 const dbReady=env=>env.COUNCIL_DB&&typeof env.COUNCIL_DB.prepare==='function';
 const routerReady=env=>typeof env.COUNCIL_ROUTER?.fetch==='function';
+const PUBLIC_WORKFLOW_STATUSES=new Set(['queued','running','waiting','paused','complete','completed','errored','failed','terminated','expired','rejected','blocked']);
+const PUBLIC_PROVIDER_NAMES=new Set(['openai','anthropic','deepseek','meta','perplexity']);
+const PUBLIC_FAILURE_REASONS=new Set(['transport_failure','invalid_response','unclassified']);
+function safeWorkflowStatus(result){
+ const value=typeof result?.status==='string'?result.status:result?.state;
+ return PUBLIC_WORKFLOW_STATUSES.has(value)?value:'unknown';
+}
+function safeWorkflowOutput(value,seat){
+ if(!value||typeof value!=='object'||Array.isArray(value)||value.seat!==seat)return null;
+ if(value.state==='completed'){
+  if(typeof value.content!=='string'||!value.content.trim()||value.content.length>48000||
+     !PUBLIC_PROVIDER_NAMES.has(value.provider))return null;
+  return {state:'completed',content:value.content,provider:value.provider};
+ }
+ if(value.state==='blocked'){
+  const r=value.reason;
+  const reason=PUBLIC_FAILURE_REASONS.has(r)||typeof r==='string'&&/^upstream_http_[1-5][0-9]{2}$/.test(r)?r:'unclassified';
+  return {state:'blocked',reason};
+ }
+ return ['expired','rejected','invalid'].includes(value.state)?{state:value.state}:null;
+}
+
 async function readRecord(env,owner,id){
  return env.COUNCIL_DB.prepare('SELECT id, owner_email, claim, evidence_json, claim_sha256, created_at FROM council_records WHERE id = ? AND owner_email = ?').bind(id,owner).first();
 }
@@ -175,7 +197,10 @@ export function createFounderApi({authenticate=verifyFounderAccess}={}){
    const r=await sendToRouter(env,request,seat,workflowPath(id),null);
    if(!r)return fail(503,'router_unavailable');
    if(!r.ok)return fail(503,'workflow_unavailable');
-   try{const result=await r.json();return reply({id,seat,recordId:link.record_id,status:result.status||result.state||'unknown',output:result.output||null,authority:OWNER});}catch{return fail(502,'workflow_error')}
+   try{
+    const result=await r.json();
+    return reply({id,seat,recordId:link.record_id,status:safeWorkflowStatus(result),output:safeWorkflowOutput(result?.output,seat),authority:OWNER});
+   }catch{return fail(502,'workflow_error')}
   }
   return fail(404,'not_found');
  }
