@@ -20,6 +20,14 @@ This package introduces **real, server-verified identity gates** and a **private
 5. Enforce Access on the entire **private** hostname. Public design preview can remain accessible; it does not have permission to query the private D1 DB, and cannot authenticate with fake passwords.
 6. Verify same-origin Pages API requests, D1 persistency, denial to non-founder identity, cross-seat denial, queue receipt, explicit approval, sanitized completion, and GitHub seal before enabling marketing links to founder workspace. Review immutable ledger retention and deletion requirements before storing actual customer data.
 
+## Immutable records and public/private hosting boundaries
+
+- **Atomicity:** a D1 `batch` writes the new founder draft and its `draft_recorded` audit event in one transaction; if either fails, neither is accepted. There is no "saved draft" success response without both receipts.
+- **Uniqueness:** apply `db/0001_founder_app.sql` followed by the additive `db/0002_unique_workflow_per_record_seat.sql`. The unique owner/record/seat index prevents duplicate immutable workflow links even if two browser requests race.
+- **Public Pages:** `council-bus-design-preview` must stage only `site/index.html` and `site/preview.html`, and set a build-output `_routes.json` that does **not** route public `/api/*` requests to Pages Functions. This Cloudflare project has no private D1 or Council Worker bindings. Do not republish the entire `site/` directory after merging founder workspace assets.
+- **Private Pages:** `council-bus-founder` is Access-protected, configured on the feature branch until release, and binds the private `COUNCIL_DB` and `COUNCIL_ROUTER`. Only server-side signed-founder requests may reach those backends. Preview deployments are not authentication proof.
+- **Production release holds:** verify real Access login and owner-scoped record read/write before promoting the branch; separately deploy and check the founder-verified Council Worker; obtain explicit human approval before any provider execution; require independent GitHub ledger sealing for evidence claims. Merely having five seats configured is not a success receipt.
+
 ## Testing
 
 `node --test app/*.test.mjs` runs local identity, authorization, evidence, seat, and queue security tests. `python3` + SQLite may validate migration triggers. GitHub checks must run on exact PR head; a green CI status does **not** establish production authentication, D1 binding, or real provider readiness.
