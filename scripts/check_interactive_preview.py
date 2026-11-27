@@ -68,6 +68,14 @@ def validate(text: str) -> list[str]:
         problems.append('one embedded approved scenery asset required')
     if 'setTimeout(rotate,7000)' not in text:
         problems.append('automatic seven-second quotes missing')
+    if 'id="scene-quote-line"' in text or 'class="scene-quote-card"' in text:
+        problems.append('separate scenic quote card or layout section must not exist')
+    if text.count('class="ambient-quote"') != 4:
+        problems.append('all four public screens must use directly overlaid quotes')
+    if '.cinematic .ambient-quote{' not in text or 'position:absolute;' not in text:
+        problems.append('ambient quote positioning missing')
+    if '.cinematic .hero-welcome::before,.cinematic .auth-shell::before{' not in text:
+        problems.append('extra scenic frame suppression missing')
     for forbidden in ('id="scene-quote-pause"', 'id="scene-quote-next"', 'id="scene-quote-count"', 'XMLHttpRequest(', 'fetch(', 'WebSocket(', 'localStorage.', 'eval(', 'new Function('):
         if forbidden in text:
             problems.append('forbidden feature or network primitive: ' + forbidden)
